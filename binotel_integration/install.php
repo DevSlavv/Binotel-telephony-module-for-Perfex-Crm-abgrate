@@ -15,8 +15,12 @@ if (!$CI->db->table_exists(db_prefix() . 'binotel_call_statistics_clients')) {
       contact_name varchar(255) DEFAULT NULL,
       waiting_time time DEFAULT NULL,
       call_duration time DEFAULT NULL,
+      transcription text DEFAULT NULL,
       PRIMARY KEY (id)
     ) ENGINE=InnoDB DEFAULT CHARSET=" . $CI->db->char_set . ';');
+} else {
+    // Додаємо поле transcription якщо воно ще не існує
+    $CI->db->query('ALTER TABLE ' . db_prefix() . 'binotel_call_statistics_clients ADD COLUMN IF NOT EXISTS transcription text DEFAULT NULL');
 }
 
 // Перевіряємо чи існує таблиця для зберігання даних для лідів
@@ -30,8 +34,11 @@ if (!$CI->db->table_exists(db_prefix() . 'binotel_call_statistics_leads')) {
       contact_name varchar(255) DEFAULT NULL,
       waiting_time time DEFAULT NULL,
       call_duration time DEFAULT NULL,
+      transcription text DEFAULT NULL,
       PRIMARY KEY (id)
     ) ENGINE=InnoDB DEFAULT CHARSET=" . $CI->db->char_set . ';');
+} else {
+    $CI->db->query('ALTER TABLE ' . db_prefix() . 'binotel_call_statistics_leads ADD COLUMN IF NOT EXISTS transcription text DEFAULT NULL');
 }
 
 // Перевіряємо чи існує таблиця для зберігання даних для співробітників
@@ -45,8 +52,11 @@ if (!$CI->db->table_exists(db_prefix() . 'binotel_call_statistics_staff')) {
       contact_name varchar(255) DEFAULT NULL,
       waiting_time time DEFAULT NULL,
       call_duration time DEFAULT NULL,
+      transcription text DEFAULT NULL,
       PRIMARY KEY (id)
     ) ENGINE=InnoDB DEFAULT CHARSET=" . $CI->db->char_set . ';');
+} else {
+    $CI->db->query('ALTER TABLE ' . db_prefix() . 'binotel_call_statistics_staff ADD COLUMN IF NOT EXISTS transcription text DEFAULT NULL');
 }
 
 // Новий: Таблиця для сповіщень дзвінків Binotel
