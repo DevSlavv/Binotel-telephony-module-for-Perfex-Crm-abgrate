@@ -28,33 +28,33 @@ $phone_numbers = preg_split('/[\s,\.]+/', $staff_phone);
                 <div class="col-md-6">
                     <div class="form-group">
                         <label for="start_date">Початкова дата</label>
-                        <input type="text" class="form-control datepicker" name="start_date" autocomplete="off" onclick="if (!this._initialized) { 
-                                   this._initialized = true; 
+                        <input type="text" class="form-control datepicker" name="start_date" autocomplete="off" onclick="if (!this._initialized) {
+                                   this._initialized = true;
                                    $(this).datetimepicker({
                                        format: 'Y-m-d',
                                        timepicker: false,
                                        scrollMonth: false,
                                        scrollInput: false
-                                   }).datetimepicker('show'); 
+                                   }).datetimepicker('show');
                                }">
                     </div>
                 </div>
                 <div class="col-md-6">
                     <div class="form-group">
                         <label for="end_date">Кінцева дата</label>
-                        <input type="text" class="form-control datepicker" name="end_date" autocomplete="off" onclick="if (!this._initialized) { 
-                                   this._initialized = true; 
+                        <input type="text" class="form-control datepicker" name="end_date" autocomplete="off" onclick="if (!this._initialized) {
+                                   this._initialized = true;
                                    $(this).datetimepicker({
                                        format: 'Y-m-d',
                                        timepicker: false,
                                        scrollMonth: false,
                                        scrollInput: false
-                                   }).datetimepicker('show'); 
+                                   }).datetimepicker('show');
                                }">
                     </div>
                 </div>
             </div>
-            
+
             <button type="button" class="btn btn-primary" onclick=" var csrfName = '<?php echo $this->security->get_csrf_token_name(); ?>';
     var csrfHash = '<?php echo $this->security->get_csrf_hash(); ?>';
 
@@ -143,6 +143,7 @@ $phone_numbers = preg_split('/[\s,\.]+/', $staff_phone);
                                 <th>Тип дзвінка</th>
                                 <th>Час дзвінка</th>
                                 <th>Запис дзвінка</th>
+                                <th>Транскрипція</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -172,6 +173,24 @@ $phone_numbers = preg_split('/[\s,\.]+/', $staff_phone);
                                             Немає запису
                                         <?php endif; ?>
                                     </td>
+                                    <td>
+                                        <?php if ($call['recording_link']): ?>
+                                            <div class="binotel-transcription-wrapper" data-call-id="<?php echo $call['id']; ?>" data-call-type="staff">
+                                                <?php if (!empty($call['transcription'])): ?>
+                                                    <div class="binotel-transcription-text"><?php echo htmlspecialchars($call['transcription']); ?></div>
+                                                    <button class="btn btn-xs btn-default binotel-retranscribe-btn" title="Транскрибувати повторно">
+                                                        <i class="fa fa-refresh"></i>
+                                                    </button>
+                                                <?php else: ?>
+                                                    <button class="btn btn-xs btn-primary binotel-transcribe-btn">
+                                                        <i class="fa fa-file-text-o"></i> Транскрибувати
+                                                    </button>
+                                                <?php endif; ?>
+                                            </div>
+                                        <?php else: ?>
+                                            &mdash;
+                                        <?php endif; ?>
+                                    </td>
                                 </tr>
                             <?php endforeach; ?>
                         </tbody>
@@ -184,3 +203,4 @@ $phone_numbers = preg_split('/[\s,\.]+/', $staff_phone);
     </div>
 </div>
 
+<?php echo binotel_transcription_js(); ?>
