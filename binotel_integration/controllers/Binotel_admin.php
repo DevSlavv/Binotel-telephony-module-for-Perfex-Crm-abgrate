@@ -271,10 +271,13 @@ public function transcribe_call() {
     $api_key    = get_option('binotel_api_key');
     $api_secret = get_option('binotel_secret');
 
-    // Визначаємо generalCallID: з БД → з URL → через пошук в Binotel API
+    // Визначаємо generalCallID: з БД → з fileName= параметра URL → кінець URL
     $general_call_id = $row->general_call_id ?? '';
     if (empty($general_call_id) && !empty($row->recording_link)) {
-        if (preg_match('/[\/=](\d{6,15})\/?$/', $row->recording_link, $m)) {
+        // Пріоритет: fileName=5124429886.mp3 у URL Binotel-порталу
+        if (preg_match('/[?&]fileName=(\d+)\.mp3/i', $row->recording_link, $m)) {
+            $general_call_id = $m[1];
+        } elseif (preg_match('/[\/=](\d{6,15})\/?(?:&|$)/', $row->recording_link, $m)) {
             $general_call_id = $m[1];
         }
     }
@@ -305,12 +308,22 @@ public function transcribe_call() {
         }
     }
 
-    // Стратегія 2: Binotel API з generalCallID
+    // Стратегія 2: Binotel API з generalCallID (get-record.json)
     if ($audio_data === false && !empty($general_call_id) && !empty($api_key) && !empty($api_secret)) {
         $audio_data = $this->_download_via_binotel_api($general_call_id, $api_key, $api_secret);
     }
 
-    // Стратегія 3: портальний URL (зазвичай потребує браузерної сесії)
+    // Стратегія 3: портальний URL + API ключ/секрет у параметрах запиту
+    if (($audio_data === false || $this->_is_html($audio_data)) && !empty($row->recording_link) && !empty($api_key) && !empty($api_secret)) {
+        $sep = (strpos($row->recording_link, '?') !== false) ? '&' : '?';
+        $auth_url = $row->recording_link . $sep . 'key=' . urlencode($api_key) . '&secret=' . urlencode($api_secret);
+        $audio_data = $this->_download_file($auth_url);
+        if ($audio_data !== false && $this->_is_html($audio_data)) {
+            $audio_data = false;
+        }
+    }
+
+    // Стратегія 4: портальний URL без авторизації (останній засіб)
     if ($audio_data === false || $this->_is_html($audio_data)) {
         $audio_data = $this->_download_file($row->recording_link);
     }
