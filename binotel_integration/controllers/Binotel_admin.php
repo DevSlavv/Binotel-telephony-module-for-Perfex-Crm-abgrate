@@ -222,18 +222,25 @@ public function transcribe_call() {
         show_404();
     }
 
+    header('Content-Type: application/json');
+
+    $csrf = [
+        'csrf_name' => $this->security->get_csrf_token_name(),
+        'csrf_hash' => $this->security->get_csrf_hash(),
+    ];
+
     $call_id   = (int) $this->input->post('call_id');
     $call_type = $this->input->post('call_type');
 
     $allowed_types = ['leads', 'clients', 'staff'];
     if (!$call_id || !in_array($call_type, $allowed_types)) {
-        echo json_encode(['success' => false, 'error' => 'Невірні параметри']);
+        echo json_encode(['success' => false, 'error' => 'Невірні параметри'] + $csrf);
         return;
     }
 
     $openai_api_key = get_option('binotel_openai_api_key');
     if (empty($openai_api_key)) {
-        echo json_encode(['success' => false, 'error' => 'OpenAI API ключ не налаштовано. Будь ласка, вкажіть його в налаштуваннях Binotel.']);
+        echo json_encode(['success' => false, 'error' => 'OpenAI API ключ не налаштовано. Будь ласка, вкажіть його в налаштуваннях Binotel.'] + $csrf);
         return;
     }
 
@@ -246,24 +253,24 @@ public function transcribe_call() {
 
     $row = $this->db->get_where($table, ['id' => $call_id])->row();
     if (!$row) {
-        echo json_encode(['success' => false, 'error' => 'Запис не знайдено']);
+        echo json_encode(['success' => false, 'error' => 'Запис не знайдено'] + $csrf);
         return;
     }
 
     // Якщо транскрипція вже існує — повертаємо її
     if (!empty($row->transcription)) {
-        echo json_encode(['success' => true, 'transcription' => $row->transcription]);
+        echo json_encode(['success' => true, 'transcription' => $row->transcription] + $csrf);
         return;
     }
 
     if (empty($row->recording_link)) {
-        echo json_encode(['success' => false, 'error' => 'Запис розмови відсутній']);
+        echo json_encode(['success' => false, 'error' => 'Запис розмови відсутній'] + $csrf);
         return;
     }
 
     // Завантажуємо аудіофайл через Binotel API (якщо є generalCallID) або напряму
-    $tmp_file  = tempnam(sys_get_temp_dir(), 'binotel_rec_') . '.mp3';
-    $api_key   = get_option('binotel_api_key');
+    $tmp_file   = tempnam(sys_get_temp_dir(), 'binotel_rec_') . '.mp3';
+    $api_key    = get_option('binotel_api_key');
     $api_secret = get_option('binotel_secret');
 
     if (!empty($row->general_call_id) && !empty($api_key) && !empty($api_secret)) {
@@ -273,13 +280,13 @@ public function transcribe_call() {
     }
 
     if ($audio_data === false) {
-        echo json_encode(['success' => false, 'error' => 'Не вдалося завантажити аудіозапис. Перевірте доступ до запису та налаштування API у модулі Binotel.']);
+        echo json_encode(['success' => false, 'error' => 'Не вдалося завантажити аудіозапис. Перевірте доступ до запису та налаштування API у модулі Binotel.'] + $csrf);
         return;
     }
 
     // Перевіряємо, що отримали аудіо, а не HTML
     if (stripos(substr($audio_data, 0, 100), '<html') !== false || stripos(substr($audio_data, 0, 100), '<!doc') !== false) {
-        echo json_encode(['success' => false, 'error' => 'Не вдалося завантажити аудіозапис: отримано HTML замість аудіо. Переконайтесь що generalCallID зберігається (дзвінки після оновлення модуля) або налаштуйте API Key/Secret у Binotel.']);
+        echo json_encode(['success' => false, 'error' => 'Не вдалося завантажити аудіозапис: отримано HTML замість аудіо. Переконайтесь що generalCallID зберігається (дзвінки після оновлення модуля) або налаштуйте API Key/Secret у Binotel.'] + $csrf);
         return;
     }
 
@@ -290,7 +297,7 @@ public function transcribe_call() {
     @unlink($tmp_file);
 
     if ($transcription === false) {
-        echo json_encode(['success' => false, 'error' => 'Помилка транскрибації. Перевірте OpenAI API ключ та спробуйте ще раз.']);
+        echo json_encode(['success' => false, 'error' => 'Помилка транскрибації. Перевірте OpenAI API ключ та спробуйте ще раз.'] + $csrf);
         return;
     }
 
@@ -298,7 +305,7 @@ public function transcribe_call() {
     $this->db->where('id', $call_id);
     $this->db->update($table, ['transcription' => $transcription]);
 
-    echo json_encode(['success' => true, 'transcription' => $transcription]);
+    echo json_encode(['success' => true, 'transcription' => $transcription] + $csrf);
 }
 
 /**

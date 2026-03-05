@@ -189,7 +189,10 @@ function binotel_transcription_js() {
     }
     $rendered = true;
 
+    $CI = &get_instance();
     $transcribe_url = admin_url('binotel_integration/binotel_admin/transcribe_call');
+    $csrf_name      = $CI->security->get_csrf_token_name();
+    $csrf_hash      = $CI->security->get_csrf_hash();
     ob_start();
     ?>
 <style>
@@ -204,6 +207,9 @@ function binotel_transcription_js() {
 </style>
 <script>
 (function() {
+    var csrfName = '<?php echo $csrf_name; ?>';
+    var csrfHash = '<?php echo $csrf_hash; ?>';
+
     function doTranscribe(wrapper) {
         var callId   = wrapper.getAttribute('data-call-id');
         var callType = wrapper.getAttribute('data-call-type');
@@ -216,14 +222,30 @@ function binotel_transcription_js() {
         var formData = new FormData();
         formData.append('call_id', callId);
         formData.append('call_type', callType);
+        formData.append(csrfName, csrfHash);
 
         fetch('<?php echo $transcribe_url; ?>', {
             method: 'POST',
             headers: { 'X-Requested-With': 'XMLHttpRequest' },
             body: formData
         })
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
+        .then(function(r) {
+            // Оновлюємо CSRF токен з заголовка відповіді (якщо Perfex його повертає)
+            var newCsrf = r.headers.get('X-CSRF-Token');
+            if (newCsrf) { csrfHash = newCsrf; }
+            return r.text();
+        })
+        .then(function(text) {
+            if (!text) {
+                throw new Error('Порожня відповідь сервера. Перевірте авторизацію.');
+            }
+            var data;
+            try {
+                data = JSON.parse(text);
+            } catch (e) {
+                throw new Error('Невірна відповідь сервера. Можливо, спрацював редирект авторизації.');
+            }
+
             if (data.success) {
                 var textDiv = wrapper.querySelector('.binotel-transcription-text');
                 if (!textDiv) {
@@ -239,8 +261,11 @@ function binotel_transcription_js() {
                     btn.title = 'Транскрибувати повторно';
                     btn.innerHTML = '<i class="fa fa-refresh"></i>';
                 }
+                // Оновлюємо CSRF для наступного запиту
+                if (data.csrf_hash) { csrfHash = data.csrf_hash; }
             } else {
                 alert('Помилка транскрибації: ' + (data.error || 'Невідома помилка'));
+                if (data.csrf_hash) { csrfHash = data.csrf_hash; }
                 if (btn) {
                     btn.disabled = false;
                     btn.innerHTML = btn.classList.contains('binotel-retranscribe-btn')
@@ -250,7 +275,7 @@ function binotel_transcription_js() {
             }
         })
         .catch(function(err) {
-            alert('Помилка з\'єднання: ' + err);
+            alert('Помилка: ' + err.message);
             if (btn) {
                 btn.disabled = false;
                 btn.innerHTML = btn.classList.contains('binotel-retranscribe-btn')
