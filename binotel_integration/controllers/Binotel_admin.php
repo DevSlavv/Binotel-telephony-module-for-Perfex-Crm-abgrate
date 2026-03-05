@@ -268,17 +268,30 @@ public function transcribe_call() {
         return;
     }
 
-    // Визначаємо generalCallID: з БД або витягуємо з URL
+    $api_key    = get_option('binotel_api_key');
+    $api_secret = get_option('binotel_secret');
+
+    // Визначаємо generalCallID: з БД → з URL → через пошук в Binotel API
     $general_call_id = $row->general_call_id ?? '';
     if (empty($general_call_id) && !empty($row->recording_link)) {
-        // Binotel URL формат: .../calls/detail/12345678 або .../calls/view/12345678
         if (preg_match('/[\/=](\d{6,15})\/?$/', $row->recording_link, $m)) {
             $general_call_id = $m[1];
         }
     }
+    if (empty($general_call_id) && !empty($api_key) && !empty($api_secret)) {
+        $general_call_id = $this->_lookup_general_call_id(
+            $row->contact_name ?? '',
+            $row->call_time ?? '',
+            $api_key,
+            $api_secret
+        );
+        // Зберігаємо знайдений ID щоб не шукати знову
+        if (!empty($general_call_id)) {
+            $this->db->where('id', $call_id);
+            $this->db->update($table, ['general_call_id' => $general_call_id]);
+        }
+    }
 
-    $api_key    = get_option('binotel_api_key');
-    $api_secret = get_option('binotel_secret');
     $tmp_file   = tempnam(sys_get_temp_dir(), 'binotel_rec_') . '.mp3';
     $audio_data = false;
 
@@ -287,7 +300,7 @@ public function transcribe_call() {
         $audio_data = $this->_download_via_binotel_api($general_call_id, $api_key, $api_secret);
     }
 
-    // Стратегія 2: пряме завантаження (якщо API не спрацювало або ID відсутній)
+    // Стратегія 2: пряме завантаження
     if ($audio_data === false || $this->_is_html($audio_data)) {
         $audio_data = $this->_download_file($row->recording_link);
     }
@@ -321,6 +334,69 @@ public function transcribe_call() {
     $this->db->update($table, ['transcription' => $transcription]);
 
     echo json_encode(['success' => true, 'transcription' => $transcription] + $csrf);
+}
+
+/**
+ * Шукає generalCallID через Binotel API get-calls-list.json за номером телефону та часом дзвінка.
+ * Використовується як fallback коли webhook не надіслав generalCallID.
+ *
+ * @param string $phone        Номер телефону (зовнішній)
+ * @param string $call_time    Datetime рядок дзвінка (Y-m-d H:i:s)
+ * @param string $api_key
+ * @param string $api_secret
+ * @return string|null  generalCallID або null якщо не знайдено
+ */
+private function _lookup_general_call_id($phone, $call_time, $api_key, $api_secret) {
+    if (empty($phone) || empty($call_time)) {
+        return null;
+    }
+
+    $ts        = strtotime($call_time);
+    $date_from = date('Y-m-d H:i:s', $ts - 300);  // ±5 хв
+    $date_to   = date('Y-m-d H:i:s', $ts + 300);
+    $phone_clean = preg_replace('/\D/', '', $phone);
+
+    $body = json_encode([
+        'key'      => $api_key,
+        'secret'   => $api_secret,
+        'dateFrom' => $date_from,
+        'dateTo'   => $date_to,
+    ]);
+
+    $ch = curl_init('https://api.binotel.com/api/4.0/calls/get-calls-list.json');
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_POST,           true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS,     $body);
+    curl_setopt($ch, CURLOPT_HTTPHEADER,     ['Content-Type: application/json']);
+    curl_setopt($ch, CURLOPT_TIMEOUT,        30);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+
+    $response  = curl_exec($ch);
+    $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($response === false || $http_code !== 200) {
+        return null;
+    }
+
+    $data = @json_decode($response, true);
+    if (!is_array($data)) {
+        return null;
+    }
+
+    // Binotel повертає масив дзвінків; шукаємо за номером телефону
+    $calls = $data['calls'] ?? $data['data'] ?? (isset($data[0]) ? $data : []);
+    foreach ($calls as $call) {
+        $ext = preg_replace('/\D/', '', $call['externalNumber'] ?? $call['phone'] ?? '');
+        if ($ext === $phone_clean || str_ends_with($ext, $phone_clean) || str_ends_with($phone_clean, $ext)) {
+            $gid = $call['generalCallID'] ?? $call['id'] ?? null;
+            if (!empty($gid)) {
+                return (string) $gid;
+            }
+        }
+    }
+
+    return null;
 }
 
 /**
