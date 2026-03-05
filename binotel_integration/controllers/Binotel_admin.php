@@ -397,7 +397,9 @@ private function _lookup_general_call_id($phone, $call_time, $api_key, $api_secr
     // Також підтримуємо indexed-масив на випадок іншої версії API
     $calls = $data['calls'] ?? $data['data'] ?? [];
     if (empty($calls)) {
-        $debug_info = 'lookup: calls порожній, ключі відповіді: ' . implode(',', array_keys($data));
+        $api_msg    = $data['message'] ?? $data['error'] ?? $data['description'] ?? '';
+        $api_code   = $data['code']    ?? $data['status']                         ?? '';
+        $debug_info = 'Binotel API: ' . ($api_code ? "[$api_code] " : '') . ($api_msg ?: 'calls порожній, ключі: ' . implode(',', array_keys($data)));
         return null;
     }
 
