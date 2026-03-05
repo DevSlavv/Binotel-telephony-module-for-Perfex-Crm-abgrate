@@ -261,13 +261,28 @@ public function transcribe_call() {
         return;
     }
 
-    // Завантажуємо аудіофайл у тимчасовий файл
-    $tmp_file = tempnam(sys_get_temp_dir(), 'binotel_rec_') . '.mp3';
-    $audio_data = $this->_download_file($row->recording_link);
+    // Завантажуємо аудіофайл через Binotel API (якщо є generalCallID) або напряму
+    $tmp_file  = tempnam(sys_get_temp_dir(), 'binotel_rec_') . '.mp3';
+    $api_key   = get_option('binotel_api_key');
+    $api_secret = get_option('binotel_secret');
+
+    if (!empty($row->general_call_id) && !empty($api_key) && !empty($api_secret)) {
+        $audio_data = $this->_download_via_binotel_api($row->general_call_id, $api_key, $api_secret);
+    } else {
+        $audio_data = $this->_download_file($row->recording_link);
+    }
+
     if ($audio_data === false) {
-        echo json_encode(['success' => false, 'error' => 'Не вдалося завантажити аудіозапис']);
+        echo json_encode(['success' => false, 'error' => 'Не вдалося завантажити аудіозапис. Перевірте доступ до запису та налаштування API у модулі Binotel.']);
         return;
     }
+
+    // Перевіряємо, що отримали аудіо, а не HTML
+    if (stripos(substr($audio_data, 0, 100), '<html') !== false || stripos(substr($audio_data, 0, 100), '<!doc') !== false) {
+        echo json_encode(['success' => false, 'error' => 'Не вдалося завантажити аудіозапис: отримано HTML замість аудіо. Переконайтесь що generalCallID зберігається (дзвінки після оновлення модуля) або налаштуйте API Key/Secret у Binotel.']);
+        return;
+    }
+
     file_put_contents($tmp_file, $audio_data);
 
     // Відправляємо на OpenAI Whisper
@@ -284,6 +299,53 @@ public function transcribe_call() {
     $this->db->update($table, ['transcription' => $transcription]);
 
     echo json_encode(['success' => true, 'transcription' => $transcription]);
+}
+
+/**
+ * Завантажує аудіозапис через Binotel API /calls/get-record.json
+ * @param string $general_call_id
+ * @param string $api_key
+ * @param string $api_secret
+ * @return string|false - бінарний вміст аудіофайлу або false при помилці
+ */
+private function _download_via_binotel_api($general_call_id, $api_key, $api_secret) {
+    $url  = 'https://api.binotel.com/api/4.0/calls/get-record.json';
+    $body = json_encode([
+        'key'           => $api_key,
+        'secret'        => $api_secret,
+        'generalCallID' => $general_call_id,
+    ]);
+
+    $ch = curl_init($url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 60);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+
+    $data      = curl_exec($ch);
+    $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($data === false || $http_code !== 200) {
+        return false;
+    }
+
+    // API може повернути JSON з посиланням на файл або сам файл
+    $decoded = @json_decode($data, true);
+    if (is_array($decoded)) {
+        // Якщо API повернув URL запису
+        $record_url = $decoded['recordUrl'] ?? $decoded['url'] ?? $decoded['link'] ?? null;
+        if ($record_url) {
+            return $this->_download_file($record_url);
+        }
+        return false;
+    }
+
+    // Якщо відповідь — бінарні дані аудіо
+    return $data;
 }
 
 /**

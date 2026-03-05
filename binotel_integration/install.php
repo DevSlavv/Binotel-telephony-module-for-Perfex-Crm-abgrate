@@ -16,13 +16,17 @@ if (!$CI->db->table_exists(db_prefix() . 'binotel_call_statistics_clients')) {
       waiting_time time DEFAULT NULL,
       call_duration time DEFAULT NULL,
       transcription text DEFAULT NULL,
+      general_call_id varchar(100) DEFAULT NULL,
       PRIMARY KEY (id)
     ) ENGINE=InnoDB DEFAULT CHARSET=" . $CI->db->char_set . ';');
 } else {
-    // Додаємо поле transcription якщо воно ще не існує
     $col = $CI->db->query('SHOW COLUMNS FROM ' . db_prefix() . "binotel_call_statistics_clients LIKE 'transcription'")->row();
     if (!$col) {
         $CI->db->query('ALTER TABLE ' . db_prefix() . 'binotel_call_statistics_clients ADD COLUMN transcription text DEFAULT NULL');
+    }
+    $col = $CI->db->query('SHOW COLUMNS FROM ' . db_prefix() . "binotel_call_statistics_clients LIKE 'general_call_id'")->row();
+    if (!$col) {
+        $CI->db->query('ALTER TABLE ' . db_prefix() . 'binotel_call_statistics_clients ADD COLUMN general_call_id varchar(100) DEFAULT NULL');
     }
 }
 
@@ -38,12 +42,17 @@ if (!$CI->db->table_exists(db_prefix() . 'binotel_call_statistics_leads')) {
       waiting_time time DEFAULT NULL,
       call_duration time DEFAULT NULL,
       transcription text DEFAULT NULL,
+      general_call_id varchar(100) DEFAULT NULL,
       PRIMARY KEY (id)
     ) ENGINE=InnoDB DEFAULT CHARSET=" . $CI->db->char_set . ';');
 } else {
     $col = $CI->db->query('SHOW COLUMNS FROM ' . db_prefix() . "binotel_call_statistics_leads LIKE 'transcription'")->row();
     if (!$col) {
         $CI->db->query('ALTER TABLE ' . db_prefix() . 'binotel_call_statistics_leads ADD COLUMN transcription text DEFAULT NULL');
+    }
+    $col = $CI->db->query('SHOW COLUMNS FROM ' . db_prefix() . "binotel_call_statistics_leads LIKE 'general_call_id'")->row();
+    if (!$col) {
+        $CI->db->query('ALTER TABLE ' . db_prefix() . 'binotel_call_statistics_leads ADD COLUMN general_call_id varchar(100) DEFAULT NULL');
     }
 }
 
@@ -59,12 +68,17 @@ if (!$CI->db->table_exists(db_prefix() . 'binotel_call_statistics_staff')) {
       waiting_time time DEFAULT NULL,
       call_duration time DEFAULT NULL,
       transcription text DEFAULT NULL,
+      general_call_id varchar(100) DEFAULT NULL,
       PRIMARY KEY (id)
     ) ENGINE=InnoDB DEFAULT CHARSET=" . $CI->db->char_set . ';');
 } else {
     $col = $CI->db->query('SHOW COLUMNS FROM ' . db_prefix() . "binotel_call_statistics_staff LIKE 'transcription'")->row();
     if (!$col) {
         $CI->db->query('ALTER TABLE ' . db_prefix() . 'binotel_call_statistics_staff ADD COLUMN transcription text DEFAULT NULL');
+    }
+    $col = $CI->db->query('SHOW COLUMNS FROM ' . db_prefix() . "binotel_call_statistics_staff LIKE 'general_call_id'")->row();
+    if (!$col) {
+        $CI->db->query('ALTER TABLE ' . db_prefix() . 'binotel_call_statistics_staff ADD COLUMN general_call_id varchar(100) DEFAULT NULL');
     }
 }
 

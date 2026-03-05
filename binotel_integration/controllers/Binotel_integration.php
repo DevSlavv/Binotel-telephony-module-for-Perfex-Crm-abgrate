@@ -87,6 +87,7 @@ class Binotel_integration extends CI_Controller {
         $disposition         = $data['callDetails']['disposition'] ?? '';
         $waiting_time        = $data['callDetails']['waitingTime'] ?? '';
         $call_duration       = $data['callDetails']['callDuration'] ?? '';
+        $general_call_id     = $data['callDetails']['generalCallID'] ?? '';
         $current_datetime    = date('Y-m-d H:i:s');
         
         if (empty($phone_number)) {
@@ -99,14 +100,14 @@ class Binotel_integration extends CI_Controller {
         $staff  = $this->find_staff_by_phone($phone_number);
         
         if ($client) {
-            $this->insert_client_call_statistics($client->userid, $call_type, $current_datetime, $call_recording_link, $waiting_time, $call_duration, $phone_number);
+            $this->insert_client_call_statistics($client->userid, $call_type, $current_datetime, $call_recording_link, $waiting_time, $call_duration, $phone_number, $general_call_id);
             $this->create_notification($phone_number, $client, null, null, $call_type, $call_recording_link, $disposition);
         } elseif ($lead) {
             $this->update_lead_last_contact($lead->id, $current_datetime);
-            $this->insert_lead_call_statistics($lead->id, $call_type, $current_datetime, $call_recording_link, $waiting_time, $call_duration, $phone_number);
+            $this->insert_lead_call_statistics($lead->id, $call_type, $current_datetime, $call_recording_link, $waiting_time, $call_duration, $phone_number, $general_call_id);
             $this->create_notification($phone_number, null, $lead, null, $call_type, $call_recording_link, $disposition);
         } elseif ($staff) {
-            $this->insert_staff_call_statistics($staff->staffid, $call_type, $current_datetime, $call_recording_link, $waiting_time, $call_duration, $phone_number);
+            $this->insert_staff_call_statistics($staff->staffid, $call_type, $current_datetime, $call_recording_link, $waiting_time, $call_duration, $phone_number, $general_call_id);
             $this->create_notification($phone_number, null, null, $staff, $call_type, $call_recording_link, $disposition);
         } else {
             // Якщо номер новий – створюємо нового ліда
@@ -123,7 +124,7 @@ class Binotel_integration extends CI_Controller {
             $this->db->insert(db_prefix() . 'leads', $lead_data);
             $new_lead_id = $this->db->insert_id();
             
-            $this->insert_lead_call_statistics($new_lead_id, $call_type, $current_datetime, $call_recording_link, $waiting_time, $call_duration, $phone_number);
+            $this->insert_lead_call_statistics($new_lead_id, $call_type, $current_datetime, $call_recording_link, $waiting_time, $call_duration, $phone_number, $general_call_id);
             $message = '<i class="fa fa-phone" style="color:green;"></i> Вхідний дзвінок від нового ліда ' . htmlspecialchars($phone_number);
             $notification_data = [
                 'description'     => $message,
@@ -228,41 +229,44 @@ class Binotel_integration extends CI_Controller {
         return $query->row();
     }
     
-    private function insert_client_call_statistics($client_id, $call_type, $call_time, $recording_link, $waiting_time, $call_duration, $external_number) {
+    private function insert_client_call_statistics($client_id, $call_type, $call_time, $recording_link, $waiting_time, $call_duration, $external_number, $general_call_id = '') {
         $data = [
-            'client_id'      => $client_id,
-            'call_type'      => $call_type,
-            'call_time'      => $call_time,
-            'recording_link' => $recording_link,
-            'waiting_time'   => $waiting_time,
-            'call_duration'  => $call_duration,
-            'contact_name'   => $external_number
+            'client_id'       => $client_id,
+            'call_type'       => $call_type,
+            'call_time'       => $call_time,
+            'recording_link'  => $recording_link,
+            'waiting_time'    => $waiting_time,
+            'call_duration'   => $call_duration,
+            'contact_name'    => $external_number,
+            'general_call_id' => $general_call_id,
         ];
         $this->db->insert(db_prefix() . 'binotel_call_statistics_clients', $data);
     }
-    
-    private function insert_lead_call_statistics($lead_id, $call_type, $call_time, $recording_link, $waiting_time, $call_duration, $external_number) {
+
+    private function insert_lead_call_statistics($lead_id, $call_type, $call_time, $recording_link, $waiting_time, $call_duration, $external_number, $general_call_id = '') {
         $data = [
-            'lead_id'        => $lead_id,
-            'call_type'      => $call_type,
-            'call_time'      => $call_time,
-            'recording_link' => $recording_link,
-            'waiting_time'   => $waiting_time,
-            'call_duration'  => $call_duration,
-            'contact_name'   => $external_number
+            'lead_id'         => $lead_id,
+            'call_type'       => $call_type,
+            'call_time'       => $call_time,
+            'recording_link'  => $recording_link,
+            'waiting_time'    => $waiting_time,
+            'call_duration'   => $call_duration,
+            'contact_name'    => $external_number,
+            'general_call_id' => $general_call_id,
         ];
         $this->db->insert(db_prefix() . 'binotel_call_statistics_leads', $data);
     }
-    
-    private function insert_staff_call_statistics($staff_id, $call_type, $call_time, $recording_link, $waiting_time, $call_duration, $external_number) {
+
+    private function insert_staff_call_statistics($staff_id, $call_type, $call_time, $recording_link, $waiting_time, $call_duration, $external_number, $general_call_id = '') {
         $data = [
-            'staff_id'       => $staff_id,
-            'call_type'      => $call_type,
-            'call_time'      => $call_time,
-            'recording_link' => $recording_link,
-            'waiting_time'   => $waiting_time,
-            'call_duration'  => $call_duration,
-            'contact_name'   => $external_number
+            'staff_id'        => $staff_id,
+            'call_type'       => $call_type,
+            'call_time'       => $call_time,
+            'recording_link'  => $recording_link,
+            'waiting_time'    => $waiting_time,
+            'call_duration'   => $call_duration,
+            'contact_name'    => $external_number,
+            'general_call_id' => $general_call_id,
         ];
         $this->db->insert(db_prefix() . 'binotel_call_statistics_staff', $data);
     }
