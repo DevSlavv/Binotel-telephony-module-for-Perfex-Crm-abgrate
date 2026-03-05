@@ -20,7 +20,10 @@ if (!$CI->db->table_exists(db_prefix() . 'binotel_call_statistics_clients')) {
     ) ENGINE=InnoDB DEFAULT CHARSET=" . $CI->db->char_set . ';');
 } else {
     // Додаємо поле transcription якщо воно ще не існує
-    $CI->db->query('ALTER TABLE ' . db_prefix() . 'binotel_call_statistics_clients ADD COLUMN IF NOT EXISTS transcription text DEFAULT NULL');
+    $col = $CI->db->query('SHOW COLUMNS FROM ' . db_prefix() . "binotel_call_statistics_clients LIKE 'transcription'")->row();
+    if (!$col) {
+        $CI->db->query('ALTER TABLE ' . db_prefix() . 'binotel_call_statistics_clients ADD COLUMN transcription text DEFAULT NULL');
+    }
 }
 
 // Перевіряємо чи існує таблиця для зберігання даних для лідів
@@ -38,7 +41,10 @@ if (!$CI->db->table_exists(db_prefix() . 'binotel_call_statistics_leads')) {
       PRIMARY KEY (id)
     ) ENGINE=InnoDB DEFAULT CHARSET=" . $CI->db->char_set . ';');
 } else {
-    $CI->db->query('ALTER TABLE ' . db_prefix() . 'binotel_call_statistics_leads ADD COLUMN IF NOT EXISTS transcription text DEFAULT NULL');
+    $col = $CI->db->query('SHOW COLUMNS FROM ' . db_prefix() . "binotel_call_statistics_leads LIKE 'transcription'")->row();
+    if (!$col) {
+        $CI->db->query('ALTER TABLE ' . db_prefix() . 'binotel_call_statistics_leads ADD COLUMN transcription text DEFAULT NULL');
+    }
 }
 
 // Перевіряємо чи існує таблиця для зберігання даних для співробітників
@@ -56,7 +62,10 @@ if (!$CI->db->table_exists(db_prefix() . 'binotel_call_statistics_staff')) {
       PRIMARY KEY (id)
     ) ENGINE=InnoDB DEFAULT CHARSET=" . $CI->db->char_set . ';');
 } else {
-    $CI->db->query('ALTER TABLE ' . db_prefix() . 'binotel_call_statistics_staff ADD COLUMN IF NOT EXISTS transcription text DEFAULT NULL');
+    $col = $CI->db->query('SHOW COLUMNS FROM ' . db_prefix() . "binotel_call_statistics_staff LIKE 'transcription'")->row();
+    if (!$col) {
+        $CI->db->query('ALTER TABLE ' . db_prefix() . 'binotel_call_statistics_staff ADD COLUMN transcription text DEFAULT NULL');
+    }
 }
 
 // Новий: Таблиця для сповіщень дзвінків Binotel
