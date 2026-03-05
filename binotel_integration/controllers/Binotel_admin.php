@@ -297,25 +297,45 @@ public function transcribe_call() {
     $tmp_file   = tempnam(sys_get_temp_dir(), 'binotel_rec_') . '.mp3';
     $audio_data = false;
 
-    // Стратегія 1: Binotel API з generalCallID
-    if (!empty($general_call_id) && !empty($api_key) && !empty($api_secret)) {
+    // Стратегія 1: пряме посилання на аудіо збережене з webhook
+    if (!empty($row->direct_audio_url)) {
+        $audio_data = $this->_download_file($row->direct_audio_url);
+        if ($audio_data !== false && $this->_is_html($audio_data)) {
+            $audio_data = false;
+        }
+    }
+
+    // Стратегія 2: Binotel API з generalCallID
+    if ($audio_data === false && !empty($general_call_id) && !empty($api_key) && !empty($api_secret)) {
         $audio_data = $this->_download_via_binotel_api($general_call_id, $api_key, $api_secret);
     }
 
-    // Стратегія 2: пряме завантаження
+    // Стратегія 3: портальний URL (зазвичай потребує браузерної сесії)
     if ($audio_data === false || $this->_is_html($audio_data)) {
         $audio_data = $this->_download_file($row->recording_link);
     }
 
-    $debug = 'id=' . ($general_call_id ?: 'порожній') . ', api=' . (!empty($api_key) ? 'є' : 'відсутній')
-           . ($lookup_debug ? ', ' . $lookup_debug : '');
+    // Показуємо поля з останнього webhook для діагностики
+    $webhook_log = '';
+    $log_file = sys_get_temp_dir() . '/binotel_webhook_debug.json';
+    if (file_exists($log_file) && filesize($log_file) < 8192) {
+        $wh = @json_decode(file_get_contents($log_file), true);
+        if (is_array($wh)) {
+            $webhook_log = ' | webhook_fields=[' . implode(',', array_keys($wh)) . ']';
+        }
+    }
+
+    $debug = 'direct_url=' . (!empty($row->direct_audio_url) ? 'є' : 'немає')
+           . ', id=' . ($general_call_id ?: 'порожній')
+           . ', api=' . (!empty($api_key) ? 'є' : 'відсутній')
+           . ($lookup_debug ? ', ' . $lookup_debug : '')
+           . $webhook_log;
 
     if ($audio_data === false) {
         echo json_encode(['success' => false, 'error' => 'Не вдалося завантажити аудіозапис. (' . $debug . ')'] + $csrf);
         return;
     }
 
-    // Перевіряємо, що отримали аудіо, а не HTML
     if ($this->_is_html($audio_data)) {
         echo json_encode(['success' => false, 'error' => 'Отримано HTML замість аудіо. (' . $debug . ')'] + $csrf);
         return;

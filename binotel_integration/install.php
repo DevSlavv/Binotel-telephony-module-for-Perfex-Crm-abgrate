@@ -17,6 +17,7 @@ if (!$CI->db->table_exists(db_prefix() . 'binotel_call_statistics_clients')) {
       call_duration time DEFAULT NULL,
       transcription text DEFAULT NULL,
       general_call_id varchar(100) DEFAULT NULL,
+      direct_audio_url text DEFAULT NULL,
       PRIMARY KEY (id)
     ) ENGINE=InnoDB DEFAULT CHARSET=" . $CI->db->char_set . ';');
 } else {
@@ -27,6 +28,10 @@ if (!$CI->db->table_exists(db_prefix() . 'binotel_call_statistics_clients')) {
     $col = $CI->db->query('SHOW COLUMNS FROM ' . db_prefix() . "binotel_call_statistics_clients LIKE 'general_call_id'")->row();
     if (!$col) {
         $CI->db->query('ALTER TABLE ' . db_prefix() . 'binotel_call_statistics_clients ADD COLUMN general_call_id varchar(100) DEFAULT NULL');
+    }
+    $col = $CI->db->query('SHOW COLUMNS FROM ' . db_prefix() . "binotel_call_statistics_clients LIKE 'direct_audio_url'")->row();
+    if (!$col) {
+        $CI->db->query('ALTER TABLE ' . db_prefix() . 'binotel_call_statistics_clients ADD COLUMN direct_audio_url text DEFAULT NULL');
     }
 }
 
@@ -43,6 +48,7 @@ if (!$CI->db->table_exists(db_prefix() . 'binotel_call_statistics_leads')) {
       call_duration time DEFAULT NULL,
       transcription text DEFAULT NULL,
       general_call_id varchar(100) DEFAULT NULL,
+      direct_audio_url text DEFAULT NULL,
       PRIMARY KEY (id)
     ) ENGINE=InnoDB DEFAULT CHARSET=" . $CI->db->char_set . ';');
 } else {
@@ -53,6 +59,10 @@ if (!$CI->db->table_exists(db_prefix() . 'binotel_call_statistics_leads')) {
     $col = $CI->db->query('SHOW COLUMNS FROM ' . db_prefix() . "binotel_call_statistics_leads LIKE 'general_call_id'")->row();
     if (!$col) {
         $CI->db->query('ALTER TABLE ' . db_prefix() . 'binotel_call_statistics_leads ADD COLUMN general_call_id varchar(100) DEFAULT NULL');
+    }
+    $col = $CI->db->query('SHOW COLUMNS FROM ' . db_prefix() . "binotel_call_statistics_leads LIKE 'direct_audio_url'")->row();
+    if (!$col) {
+        $CI->db->query('ALTER TABLE ' . db_prefix() . 'binotel_call_statistics_leads ADD COLUMN direct_audio_url text DEFAULT NULL');
     }
 }
 
@@ -69,6 +79,7 @@ if (!$CI->db->table_exists(db_prefix() . 'binotel_call_statistics_staff')) {
       call_duration time DEFAULT NULL,
       transcription text DEFAULT NULL,
       general_call_id varchar(100) DEFAULT NULL,
+      direct_audio_url text DEFAULT NULL,
       PRIMARY KEY (id)
     ) ENGINE=InnoDB DEFAULT CHARSET=" . $CI->db->char_set . ';');
 } else {
@@ -79,6 +90,10 @@ if (!$CI->db->table_exists(db_prefix() . 'binotel_call_statistics_staff')) {
     $col = $CI->db->query('SHOW COLUMNS FROM ' . db_prefix() . "binotel_call_statistics_staff LIKE 'general_call_id'")->row();
     if (!$col) {
         $CI->db->query('ALTER TABLE ' . db_prefix() . 'binotel_call_statistics_staff ADD COLUMN general_call_id varchar(100) DEFAULT NULL');
+    }
+    $col = $CI->db->query('SHOW COLUMNS FROM ' . db_prefix() . "binotel_call_statistics_staff LIKE 'direct_audio_url'")->row();
+    if (!$col) {
+        $CI->db->query('ALTER TABLE ' . db_prefix() . 'binotel_call_statistics_staff ADD COLUMN direct_audio_url text DEFAULT NULL');
     }
 }
 
