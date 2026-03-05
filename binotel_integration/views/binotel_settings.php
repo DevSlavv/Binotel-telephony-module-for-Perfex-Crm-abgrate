@@ -16,6 +16,14 @@
            value="<?php echo get_option('binotel_internal_number'); ?>">
 </div>
 
+<div class="form-group">
+    <label for="binotel_openai_api_key"><?php echo _l('OpenAI API Key (для транскрибації)'); ?></label>
+    <input type="password" id="binotel_openai_api_key" name="settings[binotel_openai_api_key]" class="form-control"
+           value="<?php echo get_option('binotel_openai_api_key'); ?>"
+           placeholder="sk-...">
+    <small class="text-muted"><?php echo _l('Використовується для транскрибації записів розмов через OpenAI Whisper. Залиште порожнім, якщо не потрібно.'); ?></small>
+</div>
+
 <div class="alert alert-info">
     <strong><?php echo _l('Інструкція з налаштування вебхука'); ?>:</strong>
     <p>
