@@ -278,12 +278,14 @@ public function transcribe_call() {
             $general_call_id = $m[1];
         }
     }
+    $lookup_debug = '';
     if (empty($general_call_id) && !empty($api_key) && !empty($api_secret)) {
         $general_call_id = $this->_lookup_general_call_id(
             $row->contact_name ?? '',
             $row->call_time ?? '',
             $api_key,
-            $api_secret
+            $api_secret,
+            $lookup_debug
         );
         // Зберігаємо знайдений ID щоб не шукати знову
         if (!empty($general_call_id)) {
@@ -305,16 +307,17 @@ public function transcribe_call() {
         $audio_data = $this->_download_file($row->recording_link);
     }
 
+    $debug = 'id=' . ($general_call_id ?: 'порожній') . ', api=' . (!empty($api_key) ? 'є' : 'відсутній')
+           . ($lookup_debug ? ', ' . $lookup_debug : '');
+
     if ($audio_data === false) {
-        $debug = 'general_call_id=' . ($general_call_id ?: 'порожній') . ', api_key=' . (!empty($api_key) ? 'є' : 'відсутній');
         echo json_encode(['success' => false, 'error' => 'Не вдалося завантажити аудіозапис. (' . $debug . ')'] + $csrf);
         return;
     }
 
     // Перевіряємо, що отримали аудіо, а не HTML
     if ($this->_is_html($audio_data)) {
-        $debug = 'general_call_id=' . ($general_call_id ?: 'порожній') . ', api_key=' . (!empty($api_key) ? 'є' : 'відсутній');
-        echo json_encode(['success' => false, 'error' => 'Сервер Binotel повернув HTML замість аудіо. URL запису потребує авторизованого сеансу браузера. (' . $debug . ')'] + $csrf);
+        echo json_encode(['success' => false, 'error' => 'Отримано HTML замість аудіо. (' . $debug . ')'] + $csrf);
         return;
     }
 
@@ -340,20 +343,24 @@ public function transcribe_call() {
  * Шукає generalCallID через Binotel API get-calls-list.json за номером телефону та часом дзвінка.
  * Використовується як fallback коли webhook не надіслав generalCallID.
  *
+ * Binotel повертає `calls` як асоціативний масив: { "generalCallID": { callData }, ... }
+ *
  * @param string $phone        Номер телефону (зовнішній)
  * @param string $call_time    Datetime рядок дзвінка (Y-m-d H:i:s)
  * @param string $api_key
  * @param string $api_secret
+ * @param string &$debug_info  Діагностична інформація (out)
  * @return string|null  generalCallID або null якщо не знайдено
  */
-private function _lookup_general_call_id($phone, $call_time, $api_key, $api_secret) {
+private function _lookup_general_call_id($phone, $call_time, $api_key, $api_secret, &$debug_info = '') {
     if (empty($phone) || empty($call_time)) {
+        $debug_info = 'lookup: phone або call_time порожні';
         return null;
     }
 
-    $ts        = strtotime($call_time);
-    $date_from = date('Y-m-d H:i:s', $ts - 300);  // ±5 хв
-    $date_to   = date('Y-m-d H:i:s', $ts + 300);
+    $ts          = strtotime($call_time);
+    $date_from   = date('Y-m-d H:i:s', $ts - 300);
+    $date_to     = date('Y-m-d H:i:s', $ts + 300);
     $phone_clean = preg_replace('/\D/', '', $phone);
 
     $body = json_encode([
@@ -376,26 +383,56 @@ private function _lookup_general_call_id($phone, $call_time, $api_key, $api_secr
     curl_close($ch);
 
     if ($response === false || $http_code !== 200) {
+        $debug_info = 'lookup API HTTP ' . $http_code . ($response === false ? ' (curl error)' : '');
         return null;
     }
 
     $data = @json_decode($response, true);
     if (!is_array($data)) {
+        $debug_info = 'lookup: не JSON, відповідь: ' . substr($response, 0, 120);
         return null;
     }
 
-    // Binotel повертає масив дзвінків; шукаємо за номером телефону
-    $calls = $data['calls'] ?? $data['data'] ?? (isset($data[0]) ? $data : []);
-    foreach ($calls as $call) {
+    // Binotel: { "status":"success", "calls": { "generalCallID": { callData }, ... } }
+    // Також підтримуємо indexed-масив на випадок іншої версії API
+    $calls = $data['calls'] ?? $data['data'] ?? [];
+    if (empty($calls)) {
+        $debug_info = 'lookup: calls порожній, ключі відповіді: ' . implode(',', array_keys($data));
+        return null;
+    }
+
+    $debug_info = 'lookup: знайдено ' . count($calls) . ' дзвінків, шукаємо ' . $phone_clean;
+
+    foreach ($calls as $gid => $call) {
+        if (!is_array($call)) {
+            continue;
+        }
         $ext = preg_replace('/\D/', '', $call['externalNumber'] ?? $call['phone'] ?? '');
-        if ($ext === $phone_clean || str_ends_with($ext, $phone_clean) || str_ends_with($phone_clean, $ext)) {
-            $gid = $call['generalCallID'] ?? $call['id'] ?? null;
-            if (!empty($gid)) {
-                return (string) $gid;
+        if (empty($ext)) {
+            continue;
+        }
+        // Порівнюємо з урахуванням кодів країни (38050... vs 050...)
+        if ($ext === $phone_clean
+            || str_ends_with($ext, $phone_clean)
+            || str_ends_with($phone_clean, $ext)
+        ) {
+            // Ключ масиву — і є generalCallID; також перевіряємо поле всередині
+            $found_gid = $call['generalCallID'] ?? (is_string($gid) || is_int($gid) ? (string)$gid : null);
+            if (!empty($found_gid)) {
+                $debug_info = 'lookup: знайдено ID=' . $found_gid . ' для ' . $ext;
+                return (string) $found_gid;
             }
         }
     }
 
+    // Перший дзвінок у вікні — якщо номер не збігся, але дзвінок єдиний
+    if (count($calls) === 1) {
+        $gid = array_key_first($calls);
+        $debug_info = 'lookup: єдиний дзвінок у вікні, використовуємо ID=' . $gid;
+        return (string) $gid;
+    }
+
+    $debug_info = 'lookup: збіг за телефоном не знайдено серед ' . count($calls) . ' дзвінків';
     return null;
 }
 
