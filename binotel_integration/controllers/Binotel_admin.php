@@ -268,25 +268,40 @@ public function transcribe_call() {
         return;
     }
 
-    // Завантажуємо аудіофайл через Binotel API (якщо є generalCallID) або напряму
-    $tmp_file   = tempnam(sys_get_temp_dir(), 'binotel_rec_') . '.mp3';
+    // Визначаємо generalCallID: з БД або витягуємо з URL
+    $general_call_id = $row->general_call_id ?? '';
+    if (empty($general_call_id) && !empty($row->recording_link)) {
+        // Binotel URL формат: .../calls/detail/12345678 або .../calls/view/12345678
+        if (preg_match('/[\/=](\d{6,15})\/?$/', $row->recording_link, $m)) {
+            $general_call_id = $m[1];
+        }
+    }
+
     $api_key    = get_option('binotel_api_key');
     $api_secret = get_option('binotel_secret');
+    $tmp_file   = tempnam(sys_get_temp_dir(), 'binotel_rec_') . '.mp3';
+    $audio_data = false;
 
-    if (!empty($row->general_call_id) && !empty($api_key) && !empty($api_secret)) {
-        $audio_data = $this->_download_via_binotel_api($row->general_call_id, $api_key, $api_secret);
-    } else {
+    // Стратегія 1: Binotel API з generalCallID
+    if (!empty($general_call_id) && !empty($api_key) && !empty($api_secret)) {
+        $audio_data = $this->_download_via_binotel_api($general_call_id, $api_key, $api_secret);
+    }
+
+    // Стратегія 2: пряме завантаження (якщо API не спрацювало або ID відсутній)
+    if ($audio_data === false || $this->_is_html($audio_data)) {
         $audio_data = $this->_download_file($row->recording_link);
     }
 
     if ($audio_data === false) {
-        echo json_encode(['success' => false, 'error' => 'Не вдалося завантажити аудіозапис. Перевірте доступ до запису та налаштування API у модулі Binotel.'] + $csrf);
+        $debug = 'general_call_id=' . ($general_call_id ?: 'порожній') . ', api_key=' . (!empty($api_key) ? 'є' : 'відсутній');
+        echo json_encode(['success' => false, 'error' => 'Не вдалося завантажити аудіозапис. (' . $debug . ')'] + $csrf);
         return;
     }
 
     // Перевіряємо, що отримали аудіо, а не HTML
-    if (stripos(substr($audio_data, 0, 100), '<html') !== false || stripos(substr($audio_data, 0, 100), '<!doc') !== false) {
-        echo json_encode(['success' => false, 'error' => 'Не вдалося завантажити аудіозапис: отримано HTML замість аудіо. Переконайтесь що generalCallID зберігається (дзвінки після оновлення модуля) або налаштуйте API Key/Secret у Binotel.'] + $csrf);
+    if ($this->_is_html($audio_data)) {
+        $debug = 'general_call_id=' . ($general_call_id ?: 'порожній') . ', api_key=' . (!empty($api_key) ? 'є' : 'відсутній');
+        echo json_encode(['success' => false, 'error' => 'Сервер Binotel повернув HTML замість аудіо. URL запису потребує авторизованого сеансу браузера. (' . $debug . ')'] + $csrf);
         return;
     }
 
@@ -306,6 +321,15 @@ public function transcribe_call() {
     $this->db->update($table, ['transcription' => $transcription]);
 
     echo json_encode(['success' => true, 'transcription' => $transcription] + $csrf);
+}
+
+/**
+ * Перевіряє чи є вміст HTML-документом
+ */
+private function _is_html($data) {
+    if (empty($data)) return false;
+    $start = strtolower(substr(ltrim($data), 0, 15));
+    return strpos($start, '<html') !== false || strpos($start, '<!doc') !== false;
 }
 
 /**
@@ -343,15 +367,24 @@ private function _download_via_binotel_api($general_call_id, $api_key, $api_secr
     // API може повернути JSON з посиланням на файл або сам файл
     $decoded = @json_decode($data, true);
     if (is_array($decoded)) {
-        // Якщо API повернув URL запису
-        $record_url = $decoded['recordUrl'] ?? $decoded['url'] ?? $decoded['link'] ?? null;
+        // Шукаємо URL запису у відомих полях відповіді Binotel
+        $record_url = $decoded['recordUrl']
+            ?? $decoded['url']
+            ?? $decoded['link']
+            ?? $decoded['fileUrl']
+            ?? $decoded['record']
+            ?? null;
         if ($record_url) {
             return $this->_download_file($record_url);
         }
         return false;
     }
 
-    // Якщо відповідь — бінарні дані аудіо
+    // Якщо відповідь — бінарні дані аудіо (перевіряємо що не HTML)
+    if ($this->_is_html($data)) {
+        return false;
+    }
+
     return $data;
 }
 
