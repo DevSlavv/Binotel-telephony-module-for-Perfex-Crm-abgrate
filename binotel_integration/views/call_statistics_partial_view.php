@@ -6,7 +6,6 @@
                     <th>Тип дзвінка</th>
                     <th>Час дзвінка</th>
                     <th>Запис дзвінка</th>
-                    <th>Транскрипція</th>
                 </tr>
             </thead>
             <tbody>
@@ -36,24 +35,6 @@
                                 Немає запису
                             <?php endif; ?>
                         </td>
-                        <td>
-                            <?php if ($call['recording_link']): ?>
-                                <div class="binotel-transcription-wrapper" data-call-id="<?php echo $call['id']; ?>" data-call-type="leads">
-                                    <?php if (!empty($call['transcription'])): ?>
-                                        <div class="binotel-transcription-text"><?php echo htmlspecialchars($call['transcription']); ?></div>
-                                        <button class="btn btn-xs btn-default binotel-retranscribe-btn" title="Транскрибувати повторно">
-                                            <i class="fa fa-refresh"></i>
-                                        </button>
-                                    <?php else: ?>
-                                        <button class="btn btn-xs btn-primary binotel-transcribe-btn">
-                                            <i class="fa fa-file-text-o"></i> Транскрибувати
-                                        </button>
-                                    <?php endif; ?>
-                                </div>
-                            <?php else: ?>
-                                &mdash;
-                            <?php endif; ?>
-                        </td>
                     </tr>
                 <?php endforeach; ?>
             </tbody>
@@ -63,4 +44,4 @@
     <p>Немає записів розмов для цього ліда.</p>
 <?php endif; ?>
 
-<?php echo binotel_transcription_js(); ?>
+
