@@ -300,7 +300,7 @@ public function transcribe_call() {
     $tmp_file   = tempnam(sys_get_temp_dir(), 'binotel_rec_') . '.mp3';
     $audio_data = false;
 
-    // Стратегія 0: аудіо-блоб завантажений браузером (де є сесія Binotel)
+    // Єдиний спосіб отримати аудіо: файл завантажений з браузера (captureStream або вибір файлу)
     if (!empty($_FILES['audio_blob']['tmp_name']) && $_FILES['audio_blob']['size'] > 0) {
         $audio_data = file_get_contents($_FILES['audio_blob']['tmp_name']);
         if ($this->_is_html($audio_data)) {
@@ -308,38 +308,8 @@ public function transcribe_call() {
         }
     }
 
-    // Стратегія 1: overlay URL з webhook (CDN-посилання для плеєра)
-    if ($audio_data === false && !empty($row->direct_audio_url)) {
-        $audio_data = $this->_download_file($row->direct_audio_url);
-        if ($audio_data !== false && $this->_is_html($audio_data)) {
-            $audio_data = false;
-        }
-    }
-
-    // Стратегія 2: логін у портал my.binotel.ua → скачати запис із сесійною кукою
-    $portal_debug = '';
-    if ($audio_data === false && !empty($row->recording_link)) {
-        $portal_email    = get_option('binotel_portal_email');
-        $portal_password = get_option('binotel_portal_password');
-        if (!empty($portal_email) && !empty($portal_password)) {
-            $cookie = $this->_get_portal_cookie($portal_email, $portal_password, $portal_debug);
-            if ($cookie) {
-                $audio_data = $this->_download_file_with_cookie($row->recording_link, $cookie);
-                if ($audio_data !== false && $this->_is_html($audio_data)) {
-                    $portal_debug .= ' got_html';
-                    $audio_data = false;
-                }
-            }
-        } else {
-            $portal_debug = 'portal_creds=не_вказані';
-        }
-    }
-
-    $debug = 'overlay=' . (!empty($row->direct_audio_url) ? 'є' : 'немає')
-           . ($portal_debug ? ' | portal: ' . $portal_debug : '');
-
     if ($audio_data === false) {
-        echo json_encode(['success' => false, 'error' => 'Не вдалося завантажити аудіозапис. (' . $debug . ')'] + $csrf);
+        echo json_encode(['success' => false, 'error' => 'Аудіофайл не отримано. Натисніть "Обрати файл" і виберіть запис вручну, або зачекайте поки аудіо відтвориться.'] + $csrf);
         return;
     }
 

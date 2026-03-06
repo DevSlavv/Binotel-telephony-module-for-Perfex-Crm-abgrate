@@ -336,25 +336,45 @@ function binotel_transcription_js() {
 
                 return; // Метод 1 запущено — виходимо
             } catch (e) {
-                // captureStream кинув помилку (CORS або не підтримується) — fallback нижче
+                // captureStream: SecurityError (CORS cross-origin) — показуємо вибір файлу
             }
         }
 
-        // Метод 2 (fallback): сервер намагається завантажити аудіо сам
-        btn && (btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Транскрибація...');
-        var formData = new FormData();
-        formData.append('call_id', callId);
-        formData.append('call_type', callType);
-        formData.append(csrfName, csrfHash);
-        fetch('<?php echo $transcribe_url; ?>', {
-            method: 'POST',
-            headers: { 'X-Requested-With': 'XMLHttpRequest' },
-            body: formData
-        })
-        .then(function(r) { return handleServerResponse(r, btn, wrapper); })
-        .catch(function(err) {
-            alert('Помилка: ' + err.message);
-            resetBtn(btn);
+        // Метод 2: вибір файлу вручну
+        // captureStream заблокований Chrome через CORS для cross-origin аудіо.
+        // Браузер вже авторизований у Binotel — завантажте файл через плеєр і оберіть його.
+        resetBtn(btn);
+        showFileUpload(wrapper, callId, callType);
+    }
+
+    function showFileUpload(wrapper, callId, callType) {
+        if (wrapper.querySelector('.binotel-file-upload-area')) return; // вже показано
+
+        var recordingUrl = wrapper.getAttribute('data-recording-url');
+
+        var area = document.createElement('div');
+        area.className = 'binotel-file-upload-area';
+        area.style.cssText = 'margin-top:6px;padding:8px;background:#fff8e1;border:1px solid #ffe082;border-radius:4px;font-size:12px;';
+        area.innerHTML =
+            '<div style="margin-bottom:5px;">' +
+            (recordingUrl
+                ? '<a href="' + recordingUrl + '" target="_blank" class="btn btn-xs btn-default" style="margin-right:4px;">' +
+                  '<i class="fa fa-download"></i> Завантажити запис</a>'
+                : '') +
+            '</div>' +
+            '<label style="cursor:pointer;margin:0;">' +
+            '<i class="fa fa-upload"></i> Обрати MP3/WAV файл для транскрибації&nbsp;' +
+            '<input type="file" accept="audio/*" style="display:none;" class="binotel-audio-file-input">' +
+            '</label>';
+
+        wrapper.appendChild(area);
+
+        area.querySelector('.binotel-audio-file-input').addEventListener('change', function() {
+            var file = this.files[0];
+            if (!file) return;
+            area.remove();
+            var btn = wrapper.querySelector('.binotel-transcribe-btn, .binotel-retranscribe-btn');
+            sendBlob(file, callId, callType, btn, wrapper, file.name.split('.').pop() || 'mp3');
         });
     }
 
