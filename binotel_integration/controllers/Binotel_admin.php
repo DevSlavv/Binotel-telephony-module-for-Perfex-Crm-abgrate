@@ -317,8 +317,9 @@ public function transcribe_call() {
     }
 
     // Стратегія 2: Binotel API з generalCallID (get-record.json)
+    $api_debug = '';
     if ($audio_data === false && !empty($general_call_id) && !empty($api_key) && !empty($api_secret)) {
-        $audio_data = $this->_download_via_binotel_api($general_call_id, $api_key, $api_secret);
+        $audio_data = $this->_download_via_binotel_api($general_call_id, $api_key, $api_secret, $api_debug);
     }
 
     // Стратегія 3: портальний URL + API ключ/секрет у параметрах запиту
@@ -349,6 +350,7 @@ public function transcribe_call() {
     $debug = 'direct_url=' . (!empty($row->direct_audio_url) ? 'є' : 'немає')
            . ', id=' . ($general_call_id ?: 'порожній')
            . ', api=' . (!empty($api_key) ? 'є' : 'відсутній')
+           . ($api_debug ? ' | ' . $api_debug : '')
            . ($lookup_debug ? ', ' . $lookup_debug : '')
            . $webhook_log;
 
@@ -490,12 +492,13 @@ private function _is_html($data) {
 
 /**
  * Завантажує аудіозапис через Binotel API /calls/get-record.json
- * @param string $general_call_id
- * @param string $api_key
- * @param string $api_secret
- * @return string|false - бінарний вміст аудіофайлу або false при помилці
+ * @param string  $general_call_id
+ * @param string  $api_key
+ * @param string  $api_secret
+ * @param string &$api_debug  Діагностика: HTTP-код та скорочена відповідь (out)
+ * @return string|false
  */
-private function _download_via_binotel_api($general_call_id, $api_key, $api_secret) {
+private function _download_via_binotel_api($general_call_id, $api_key, $api_secret, &$api_debug = '') {
     $url  = 'https://api.binotel.com/api/4.0/calls/get-record.json';
     $body = json_encode([
         'key'           => $api_key,
@@ -516,6 +519,8 @@ private function _download_via_binotel_api($general_call_id, $api_key, $api_secr
     $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
 
+    $api_debug = 'API_HTTP=' . $http_code . ' resp=' . substr(preg_replace('/\s+/', ' ', $data), 0, 120);
+
     if ($data === false || $http_code !== 200) {
         return false;
     }
@@ -529,6 +534,9 @@ private function _download_via_binotel_api($general_call_id, $api_key, $api_secr
             ?? $decoded['link']
             ?? $decoded['fileUrl']
             ?? $decoded['record']
+            ?? $decoded['callRecord']
+            ?? $decoded['recordLink']
+            ?? $decoded['downloadUrl']
             ?? null;
         if ($record_url) {
             return $this->_download_file($record_url);
