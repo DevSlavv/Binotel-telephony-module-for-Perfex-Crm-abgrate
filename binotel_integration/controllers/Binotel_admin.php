@@ -300,8 +300,16 @@ public function transcribe_call() {
     $tmp_file   = tempnam(sys_get_temp_dir(), 'binotel_rec_') . '.mp3';
     $audio_data = false;
 
+    // Стратегія 0: аудіо-блоб завантажений браузером (найпростіше і найнадійніше)
+    if (!empty($_FILES['audio_blob']['tmp_name']) && $_FILES['audio_blob']['size'] > 0) {
+        $audio_data = file_get_contents($_FILES['audio_blob']['tmp_name']);
+        if ($this->_is_html($audio_data)) {
+            $audio_data = false;
+        }
+    }
+
     // Стратегія 1: пряме посилання на аудіо збережене з webhook
-    if (!empty($row->direct_audio_url)) {
+    if ($audio_data === false && !empty($row->direct_audio_url)) {
         $audio_data = $this->_download_file($row->direct_audio_url);
         if ($audio_data !== false && $this->_is_html($audio_data)) {
             $audio_data = false;

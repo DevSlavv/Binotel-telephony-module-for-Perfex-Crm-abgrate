@@ -38,7 +38,7 @@
                         </td>
                         <td>
                             <?php if ($call['recording_link']): ?>
-                                <div class="binotel-transcription-wrapper" data-call-id="<?php echo $call['id']; ?>" data-call-type="leads">
+                                <div class="binotel-transcription-wrapper" data-call-id="<?php echo $call['id']; ?>" data-call-type="leads" data-recording-url="<?php echo htmlspecialchars($call['recording_link']); ?>">
                                     <?php if (!empty($call['transcription'])): ?>
                                         <div class="binotel-transcription-text"><?php echo htmlspecialchars($call['transcription']); ?></div>
                                         <button class="btn btn-xs btn-default binotel-retranscribe-btn" title="Транскрибувати повторно">

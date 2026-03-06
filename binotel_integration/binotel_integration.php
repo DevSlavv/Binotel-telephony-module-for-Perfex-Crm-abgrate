@@ -210,42 +210,24 @@ function binotel_transcription_js() {
     var csrfName = '<?php echo $csrf_name; ?>';
     var csrfHash = '<?php echo $csrf_hash; ?>';
 
-    function doTranscribe(wrapper) {
-        var callId   = wrapper.getAttribute('data-call-id');
-        var callType = wrapper.getAttribute('data-call-type');
-        var btn = wrapper.querySelector('.binotel-transcribe-btn, .binotel-retranscribe-btn');
-        if (btn) {
-            btn.disabled = true;
-            btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Транскрибація...';
-        }
-
-        var formData = new FormData();
-        formData.append('call_id', callId);
-        formData.append('call_type', callType);
-        formData.append(csrfName, csrfHash);
-
-        fetch('<?php echo $transcribe_url; ?>', {
+    function sendToServer(formData, btn, wrapper) {
+        return fetch('<?php echo $transcribe_url; ?>', {
             method: 'POST',
             headers: { 'X-Requested-With': 'XMLHttpRequest' },
             body: formData
-        })
-        .then(function(r) {
-            // Оновлюємо CSRF токен з заголовка відповіді (якщо Perfex його повертає)
-            var newCsrf = r.headers.get('X-CSRF-Token');
-            if (newCsrf) { csrfHash = newCsrf; }
-            return r.text();
-        })
-        .then(function(text) {
-            if (!text) {
-                throw new Error('Порожня відповідь сервера. Перевірте авторизацію.');
-            }
-            var data;
-            try {
-                data = JSON.parse(text);
-            } catch (e) {
-                throw new Error('Невірна відповідь сервера. Можливо, спрацював редирект авторизації.');
-            }
+        });
+    }
 
+    function handleServerResponse(r, btn, wrapper) {
+        var newCsrf = r.headers.get('X-CSRF-Token');
+        if (newCsrf) { csrfHash = newCsrf; }
+        return r.text().then(function(text) {
+            if (!text) throw new Error('Порожня відповідь сервера.');
+            var data;
+            try { data = JSON.parse(text); } catch (e) {
+                throw new Error('Невірна відповідь сервера.');
+            }
+            if (data.csrf_hash) { csrfHash = data.csrf_hash; }
             if (data.success) {
                 var textDiv = wrapper.querySelector('.binotel-transcription-text');
                 if (!textDiv) {
@@ -254,18 +236,14 @@ function binotel_transcription_js() {
                     wrapper.insertBefore(textDiv, wrapper.firstChild);
                 }
                 textDiv.textContent = data.transcription;
-
                 if (btn) {
                     btn.className = 'btn btn-xs btn-default binotel-retranscribe-btn';
                     btn.disabled = false;
                     btn.title = 'Транскрибувати повторно';
                     btn.innerHTML = '<i class="fa fa-refresh"></i>';
                 }
-                // Оновлюємо CSRF для наступного запиту
-                if (data.csrf_hash) { csrfHash = data.csrf_hash; }
             } else {
                 alert('Помилка транскрибації: ' + (data.error || 'Невідома помилка'));
-                if (data.csrf_hash) { csrfHash = data.csrf_hash; }
                 if (btn) {
                     btn.disabled = false;
                     btn.innerHTML = btn.classList.contains('binotel-retranscribe-btn')
@@ -273,16 +251,67 @@ function binotel_transcription_js() {
                         : '<i class="fa fa-file-text-o"></i> Транскрибувати';
                 }
             }
-        })
-        .catch(function(err) {
-            alert('Помилка: ' + err.message);
-            if (btn) {
-                btn.disabled = false;
-                btn.innerHTML = btn.classList.contains('binotel-retranscribe-btn')
-                    ? '<i class="fa fa-refresh"></i>'
-                    : '<i class="fa fa-file-text-o"></i> Транскрибувати';
-            }
         });
+    }
+
+    function doTranscribe(wrapper) {
+        var callId       = wrapper.getAttribute('data-call-id');
+        var callType     = wrapper.getAttribute('data-call-type');
+        var recordingUrl = wrapper.getAttribute('data-recording-url');
+        var btn = wrapper.querySelector('.binotel-transcribe-btn, .binotel-retranscribe-btn');
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Транскрибація...';
+        }
+
+        function fallback(formData) {
+            // Сервер сам завантажить аудіо (API або інші стратегії)
+            return sendToServer(formData, btn, wrapper)
+                .then(function(r) { return handleServerResponse(r, btn, wrapper); })
+                .catch(function(err) {
+                    alert('Помилка: ' + err.message);
+                    if (btn) {
+                        btn.disabled = false;
+                        btn.innerHTML = btn.classList.contains('binotel-retranscribe-btn')
+                            ? '<i class="fa fa-refresh"></i>'
+                            : '<i class="fa fa-file-text-o"></i> Транскрибувати';
+                    }
+                });
+        }
+
+        var formData = new FormData();
+        formData.append('call_id', callId);
+        formData.append('call_type', callType);
+        formData.append(csrfName, csrfHash);
+
+        // Спочатку намагаємось завантажити аудіо з браузера (де є сесія Binotel)
+        if (recordingUrl) {
+            btn && (btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Завантаження...');
+            fetch(recordingUrl, { credentials: 'include' })
+                .then(function(r) {
+                    var ct = r.headers.get('Content-Type') || '';
+                    // Перевіряємо що отримали аудіо, а не HTML-сторінку
+                    if (!r.ok || ct.indexOf('html') !== -1) {
+                        throw new Error('not-audio');
+                    }
+                    return r.blob();
+                })
+                .then(function(blob) {
+                    // Браузер завантажив аудіо — відправляємо на сервер
+                    if (blob.size < 1000) throw new Error('too-small');
+                    btn && (btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Транскрибація...');
+                    formData.append('audio_blob', blob, 'recording.mp3');
+                    return sendToServer(formData, btn, wrapper)
+                        .then(function(r) { return handleServerResponse(r, btn, wrapper); });
+                })
+                .catch(function() {
+                    // CORS або не аудіо — передаємо завдання серверу
+                    btn && (btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Транскрибація...');
+                    return fallback(formData);
+                });
+        } else {
+            fallback(formData);
+        }
     }
 
     document.addEventListener('click', function(e) {
