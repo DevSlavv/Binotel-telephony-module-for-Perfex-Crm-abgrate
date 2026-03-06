@@ -210,12 +210,12 @@ function binotel_transcription_js() {
     var csrfName = '<?php echo $csrf_name; ?>';
     var csrfHash = '<?php echo $csrf_hash; ?>';
 
-    function sendToServer(formData, btn, wrapper) {
-        return fetch('<?php echo $transcribe_url; ?>', {
-            method: 'POST',
-            headers: { 'X-Requested-With': 'XMLHttpRequest' },
-            body: formData
-        });
+    function resetBtn(btn) {
+        if (!btn) return;
+        btn.disabled = false;
+        btn.innerHTML = btn.classList.contains('binotel-retranscribe-btn')
+            ? '<i class="fa fa-refresh"></i>'
+            : '<i class="fa fa-file-text-o"></i> Транскрибувати';
     }
 
     function handleServerResponse(r, btn, wrapper) {
@@ -244,74 +244,118 @@ function binotel_transcription_js() {
                 }
             } else {
                 alert('Помилка транскрибації: ' + (data.error || 'Невідома помилка'));
-                if (btn) {
-                    btn.disabled = false;
-                    btn.innerHTML = btn.classList.contains('binotel-retranscribe-btn')
-                        ? '<i class="fa fa-refresh"></i>'
-                        : '<i class="fa fa-file-text-o"></i> Транскрибувати';
-                }
+                resetBtn(btn);
             }
         });
     }
 
-    function doTranscribe(wrapper) {
-        var callId       = wrapper.getAttribute('data-call-id');
-        var callType     = wrapper.getAttribute('data-call-type');
-        var recordingUrl = wrapper.getAttribute('data-recording-url');
-        var btn = wrapper.querySelector('.binotel-transcribe-btn, .binotel-retranscribe-btn');
-        if (btn) {
-            btn.disabled = true;
-            btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Транскрибація...';
-        }
-
-        function fallback(formData) {
-            // Сервер сам завантажить аудіо (API або інші стратегії)
-            return sendToServer(formData, btn, wrapper)
-                .then(function(r) { return handleServerResponse(r, btn, wrapper); })
-                .catch(function(err) {
-                    alert('Помилка: ' + err.message);
-                    if (btn) {
-                        btn.disabled = false;
-                        btn.innerHTML = btn.classList.contains('binotel-retranscribe-btn')
-                            ? '<i class="fa fa-refresh"></i>'
-                            : '<i class="fa fa-file-text-o"></i> Транскрибувати';
-                    }
-                });
-        }
-
+    function sendBlob(blob, callId, callType, btn, wrapper, ext) {
+        btn && (btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Транскрибація...');
         var formData = new FormData();
         formData.append('call_id', callId);
         formData.append('call_type', callType);
         formData.append(csrfName, csrfHash);
+        formData.append('audio_blob', blob, 'recording.' + (ext || 'webm'));
+        fetch('<?php echo $transcribe_url; ?>', {
+            method: 'POST',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            body: formData
+        })
+        .then(function(r) { return handleServerResponse(r, btn, wrapper); })
+        .catch(function(err) {
+            alert('Помилка: ' + err.message);
+            resetBtn(btn);
+        });
+    }
 
-        // Спочатку намагаємось завантажити аудіо з браузера (де є сесія Binotel)
-        if (recordingUrl) {
-            btn && (btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Завантаження...');
-            fetch(recordingUrl, { credentials: 'include' })
-                .then(function(r) {
-                    var ct = r.headers.get('Content-Type') || '';
-                    // Перевіряємо що отримали аудіо, а не HTML-сторінку
-                    if (!r.ok || ct.indexOf('html') !== -1) {
-                        throw new Error('not-audio');
-                    }
-                    return r.blob();
-                })
-                .then(function(blob) {
-                    // Браузер завантажив аудіо — відправляємо на сервер
-                    if (blob.size < 1000) throw new Error('too-small');
-                    btn && (btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Транскрибація...');
-                    formData.append('audio_blob', blob, 'recording.mp3');
-                    return sendToServer(formData, btn, wrapper)
-                        .then(function(r) { return handleServerResponse(r, btn, wrapper); });
-                })
-                .catch(function() {
-                    // CORS або не аудіо — передаємо завдання серверу
-                    btn && (btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Транскрибація...');
-                    return fallback(formData);
-                });
-        } else {
-            fallback(formData);
+    function doTranscribe(wrapper) {
+        var callId   = wrapper.getAttribute('data-call-id');
+        var callType = wrapper.getAttribute('data-call-type');
+        var btn = wrapper.querySelector('.binotel-transcribe-btn, .binotel-retranscribe-btn');
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Завантаження...';
         }
+
+        // Метод 1: captureStream() — запис аудіо прямо з плеєра в браузері.
+        // Не потребує жодної авторизації на сервері: браузер вже залогінений у Binotel.
+        var row = wrapper.closest('tr');
+        var audioEl = row ? row.querySelector('audio') : null;
+
+        if (audioEl && (typeof audioEl.captureStream === 'function' || typeof audioEl.mozCaptureStream === 'function')) {
+            try {
+                var stream = audioEl.captureStream
+                    ? audioEl.captureStream()
+                    : audioEl.mozCaptureStream();
+
+                var mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+                    ? 'audio/webm;codecs=opus'
+                    : 'audio/ogg;codecs=opus';
+                var recorder = new MediaRecorder(stream, { mimeType: mimeType });
+                var chunks   = [];
+
+                recorder.ondataavailable = function(e) {
+                    if (e.data && e.data.size > 0) chunks.push(e.data);
+                };
+
+                recorder.onstop = function() {
+                    var blob = new Blob(chunks, { type: mimeType });
+                    if (blob.size < 500) {
+                        alert('Не вдалося записати аудіо. Можливо браузер заблокував доступ до плеєра.');
+                        resetBtn(btn);
+                        return;
+                    }
+                    var ext = mimeType.indexOf('ogg') !== -1 ? 'ogg' : 'webm';
+                    sendBlob(blob, callId, callType, btn, wrapper, ext);
+                };
+
+                recorder.onerror = function() {
+                    alert('Помилка запису. Спробуйте перезавантажити сторінку.');
+                    resetBtn(btn);
+                };
+
+                recorder.start(100);
+                btn && (btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Програє...');
+
+                // Зупиняємо запис коли аудіо закінчилось або за timeout
+                var safeguard = setTimeout(function() {
+                    if (recorder.state === 'recording') recorder.stop();
+                }, 10 * 60 * 1000);
+
+                audioEl.currentTime = 0;
+                audioEl.play().catch(function(err) {
+                    clearTimeout(safeguard);
+                    recorder.stop();
+                });
+
+                audioEl.addEventListener('ended', function onEnded() {
+                    clearTimeout(safeguard);
+                    audioEl.removeEventListener('ended', onEnded);
+                    if (recorder.state === 'recording') recorder.stop();
+                }, { once: true });
+
+                return; // Метод 1 запущено — виходимо
+            } catch (e) {
+                // captureStream кинув помилку (CORS або не підтримується) — fallback нижче
+            }
+        }
+
+        // Метод 2 (fallback): сервер намагається завантажити аудіо сам
+        btn && (btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Транскрибація...');
+        var formData = new FormData();
+        formData.append('call_id', callId);
+        formData.append('call_type', callType);
+        formData.append(csrfName, csrfHash);
+        fetch('<?php echo $transcribe_url; ?>', {
+            method: 'POST',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            body: formData
+        })
+        .then(function(r) { return handleServerResponse(r, btn, wrapper); })
+        .catch(function(err) {
+            alert('Помилка: ' + err.message);
+            resetBtn(btn);
+        });
     }
 
     document.addEventListener('click', function(e) {

@@ -30,6 +30,8 @@
 </div>
 
 
+<div class="form-group">
+    <label for="binotel_openai_api_key"><?php echo _l('OpenAI API Key (для транскрибації)'); ?></label>
     <input type="password" id="binotel_openai_api_key" name="settings[binotel_openai_api_key]" class="form-control"
            value="<?php echo get_option('binotel_openai_api_key'); ?>"
            placeholder="sk-...">
