@@ -98,12 +98,12 @@ class Binotel_integration extends CI_Controller {
             ?? $data['callDetails']['id']
             ?? $data['callDetails']['pbxCallId']
             ?? '';
-        // Пряме посилання на аудіофайл (якщо Binotel надсилає)
-        $direct_audio_url    = $data['callDetails']['fileUrl']
+        // Пряме посилання на аудіофайл (overlay URL — CDN-посилання для плеєра)
+        $direct_audio_url    = $data['callDetails']['linkToCallRecordOverlayInMyBusiness']
+            ?? $data['callDetails']['fileUrl']
             ?? $data['callDetails']['callRecordLink']
             ?? $data['callDetails']['linkToRecord']
             ?? $data['callDetails']['recordingUrl']
-            ?? $data['callDetails']['mp3link']
             ?? '';
         $current_datetime    = date('Y-m-d H:i:s');
         

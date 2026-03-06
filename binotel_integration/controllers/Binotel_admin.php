@@ -300,7 +300,7 @@ public function transcribe_call() {
     $tmp_file   = tempnam(sys_get_temp_dir(), 'binotel_rec_') . '.mp3';
     $audio_data = false;
 
-    // Стратегія 0: аудіо-блоб завантажений браузером (найпростіше і найнадійніше)
+    // Стратегія 0: аудіо-блоб завантажений браузером (де є сесія Binotel)
     if (!empty($_FILES['audio_blob']['tmp_name']) && $_FILES['audio_blob']['size'] > 0) {
         $audio_data = file_get_contents($_FILES['audio_blob']['tmp_name']);
         if ($this->_is_html($audio_data)) {
@@ -308,7 +308,7 @@ public function transcribe_call() {
         }
     }
 
-    // Стратегія 1: пряме посилання на аудіо збережене з webhook
+    // Стратегія 1: overlay URL з webhook (CDN-посилання для плеєра, без потреби в сесії)
     if ($audio_data === false && !empty($row->direct_audio_url)) {
         $audio_data = $this->_download_file($row->direct_audio_url);
         if ($audio_data !== false && $this->_is_html($audio_data)) {
@@ -316,43 +316,11 @@ public function transcribe_call() {
         }
     }
 
-    // Стратегія 2: Binotel API з generalCallID (get-record.json)
-    $api_debug = '';
-    if ($audio_data === false && !empty($general_call_id) && !empty($api_key) && !empty($api_secret)) {
-        $audio_data = $this->_download_via_binotel_api($general_call_id, $api_key, $api_secret, $api_debug);
-    }
+    // Примітка: Binotel API v4.0 не має методів для скачування записів
+    // (get-record.json і get-calls-list.json повертають 102 "No such method")
 
-    // Стратегія 3: портальний URL + API ключ/секрет у параметрах запиту
-    if (($audio_data === false || $this->_is_html($audio_data)) && !empty($row->recording_link) && !empty($api_key) && !empty($api_secret)) {
-        $sep = (strpos($row->recording_link, '?') !== false) ? '&' : '?';
-        $auth_url = $row->recording_link . $sep . 'key=' . urlencode($api_key) . '&secret=' . urlencode($api_secret);
-        $audio_data = $this->_download_file($auth_url);
-        if ($audio_data !== false && $this->_is_html($audio_data)) {
-            $audio_data = false;
-        }
-    }
-
-    // Стратегія 4: портальний URL без авторизації (останній засіб)
-    if ($audio_data === false || $this->_is_html($audio_data)) {
-        $audio_data = $this->_download_file($row->recording_link);
-    }
-
-    // Показуємо поля з останнього webhook для діагностики
-    $webhook_log = '';
-    $log_file = sys_get_temp_dir() . '/binotel_webhook_debug.json';
-    if (file_exists($log_file) && filesize($log_file) < 8192) {
-        $wh = @json_decode(file_get_contents($log_file), true);
-        if (is_array($wh)) {
-            $webhook_log = ' | webhook_fields=[' . implode(',', array_keys($wh)) . ']';
-        }
-    }
-
-    $debug = 'direct_url=' . (!empty($row->direct_audio_url) ? 'є' : 'немає')
-           . ', id=' . ($general_call_id ?: 'порожній')
-           . ', api=' . (!empty($api_key) ? 'є' : 'відсутній')
-           . ($api_debug ? ' | ' . $api_debug : '')
-           . ($lookup_debug ? ', ' . $lookup_debug : '')
-           . $webhook_log;
+    $debug = 'overlay_url=' . (!empty($row->direct_audio_url) ? substr($row->direct_audio_url, 0, 60) : 'немає')
+           . ', id=' . ($general_call_id ?: 'порожній');
 
     if ($audio_data === false) {
         echo json_encode(['success' => false, 'error' => 'Не вдалося завантажити аудіозапис. (' . $debug . ')'] + $csrf);
