@@ -269,103 +269,68 @@ function binotel_transcription_js() {
     }
 
     function doTranscribe(wrapper) {
-        var callId   = wrapper.getAttribute('data-call-id');
-        var callType = wrapper.getAttribute('data-call-type');
+        var callId       = wrapper.getAttribute('data-call-id');
+        var callType     = wrapper.getAttribute('data-call-type');
+        var recordingUrl = wrapper.getAttribute('data-recording-url');
         var btn = wrapper.querySelector('.binotel-transcribe-btn, .binotel-retranscribe-btn');
         if (btn) {
             btn.disabled = true;
             btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Завантаження...';
         }
 
-        // Метод 1: captureStream() — запис аудіо прямо з плеєра в браузері.
-        // Не потребує жодної авторизації на сервері: браузер вже залогінений у Binotel.
-        var row = wrapper.closest('tr');
-        var audioEl = row ? row.querySelector('audio') : null;
-
-        if (audioEl && (typeof audioEl.captureStream === 'function' || typeof audioEl.mozCaptureStream === 'function')) {
-            try {
-                var stream = audioEl.captureStream
-                    ? audioEl.captureStream()
-                    : audioEl.mozCaptureStream();
-
-                var mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-                    ? 'audio/webm;codecs=opus'
-                    : 'audio/ogg;codecs=opus';
-                var recorder = new MediaRecorder(stream, { mimeType: mimeType });
-                var chunks   = [];
-
-                recorder.ondataavailable = function(e) {
-                    if (e.data && e.data.size > 0) chunks.push(e.data);
-                };
-
-                recorder.onstop = function() {
-                    var blob = new Blob(chunks, { type: mimeType });
-                    if (blob.size < 500) {
-                        alert('Не вдалося записати аудіо. Можливо браузер заблокував доступ до плеєра.');
-                        resetBtn(btn);
-                        return;
-                    }
-                    var ext = mimeType.indexOf('ogg') !== -1 ? 'ogg' : 'webm';
-                    sendBlob(blob, callId, callType, btn, wrapper, ext);
-                };
-
-                recorder.onerror = function() {
-                    alert('Помилка запису. Спробуйте перезавантажити сторінку.');
+        // Метод 1: fetch з credentials — якщо Binotel дозволяє CORS, отримаємо blob одразу
+        if (recordingUrl) {
+            fetch(recordingUrl, { credentials: 'include' })
+                .then(function(r) {
+                    if (!r.ok) throw new Error('http-' + r.status);
+                    var ct = r.headers.get('Content-Type') || '';
+                    if (ct.indexOf('html') !== -1) throw new Error('got-html');
+                    return r.blob();
+                })
+                .then(function(blob) {
+                    if (blob.size < 1000) throw new Error('too-small');
+                    sendBlob(blob, callId, callType, btn, wrapper, 'mp3');
+                })
+                .catch(function() {
+                    // CORS заблокував — відкриваємо завантаження і picker одночасно
                     resetBtn(btn);
-                };
-
-                recorder.start(100);
-                btn && (btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Програє...');
-
-                // Зупиняємо запис коли аудіо закінчилось або за timeout
-                var safeguard = setTimeout(function() {
-                    if (recorder.state === 'recording') recorder.stop();
-                }, 10 * 60 * 1000);
-
-                audioEl.currentTime = 0;
-                audioEl.play().catch(function(err) {
-                    clearTimeout(safeguard);
-                    recorder.stop();
+                    showFileUpload(wrapper, callId, callType, true);
                 });
-
-                audioEl.addEventListener('ended', function onEnded() {
-                    clearTimeout(safeguard);
-                    audioEl.removeEventListener('ended', onEnded);
-                    if (recorder.state === 'recording') recorder.stop();
-                }, { once: true });
-
-                return; // Метод 1 запущено — виходимо
-            } catch (e) {
-                // captureStream: SecurityError (CORS cross-origin) — показуємо вибір файлу
-            }
+            return;
         }
 
-        // Метод 2: вибір файлу вручну
-        // captureStream заблокований Chrome через CORS для cross-origin аудіо.
-        // Браузер вже авторизований у Binotel — завантажте файл через плеєр і оберіть його.
         resetBtn(btn);
-        showFileUpload(wrapper, callId, callType);
+        showFileUpload(wrapper, callId, callType, false);
     }
 
-    function showFileUpload(wrapper, callId, callType) {
-        if (wrapper.querySelector('.binotel-file-upload-area')) return; // вже показано
+    function showFileUpload(wrapper, callId, callType, autoDownload) {
+        if (wrapper.querySelector('.binotel-file-upload-area')) return;
 
         var recordingUrl = wrapper.getAttribute('data-recording-url');
+
+        // Якщо autoDownload — одразу тригеримо завантаження файлу в браузері
+        if (autoDownload && recordingUrl) {
+            var a = document.createElement('a');
+            a.href = recordingUrl;
+            a.download = '';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        }
 
         var area = document.createElement('div');
         area.className = 'binotel-file-upload-area';
         area.style.cssText = 'margin-top:6px;padding:8px;background:#fff8e1;border:1px solid #ffe082;border-radius:4px;font-size:12px;';
-        area.innerHTML =
-            '<div style="margin-bottom:5px;">' +
-            (recordingUrl
-                ? '<a href="' + recordingUrl + '" target="_blank" class="btn btn-xs btn-default" style="margin-right:4px;">' +
-                  '<i class="fa fa-download"></i> Завантажити запис</a>'
-                : '') +
-            '</div>' +
-            '<label style="cursor:pointer;margin:0;">' +
-            '<i class="fa fa-upload"></i> Обрати MP3/WAV файл для транскрибації&nbsp;' +
-            '<input type="file" accept="audio/*" style="display:none;" class="binotel-audio-file-input">' +
-            '</label>';
+        area.innerHTML = autoDownload
+            ? '<div style="margin-bottom:4px;color:#555;">Файл завантажується у браузері — оберіть його після завантаження:</div>' +
+              '<label style="cursor:pointer;margin:0;display:inline-block;">' +
+              '<span class="btn btn-xs btn-primary"><i class="fa fa-upload"></i> Обрати файл</span>' +
+              '<input type="file" accept="audio/*" style="display:none;" class="binotel-audio-file-input">' +
+              '</label>'
+            : '<label style="cursor:pointer;margin:0;display:inline-block;">' +
+              '<span class="btn btn-xs btn-default"><i class="fa fa-upload"></i> Обрати MP3/WAV для транскрибації</span>' +
+              '<input type="file" accept="audio/*" style="display:none;" class="binotel-audio-file-input">' +
+              '</label>';
 
         wrapper.appendChild(area);
 
