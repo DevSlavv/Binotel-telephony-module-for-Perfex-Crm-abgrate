@@ -308,7 +308,7 @@ public function transcribe_call() {
         }
     }
 
-    // Стратегія 1: overlay URL з webhook (CDN-посилання для плеєра, без потреби в сесії)
+    // Стратегія 1: overlay URL з webhook (CDN-посилання для плеєра)
     if ($audio_data === false && !empty($row->direct_audio_url)) {
         $audio_data = $this->_download_file($row->direct_audio_url);
         if ($audio_data !== false && $this->_is_html($audio_data)) {
@@ -316,11 +316,27 @@ public function transcribe_call() {
         }
     }
 
-    // Примітка: Binotel API v4.0 не має методів для скачування записів
-    // (get-record.json і get-calls-list.json повертають 102 "No such method")
+    // Стратегія 2: логін у портал my.binotel.ua → скачати запис із сесійною кукою
+    $portal_debug = '';
+    if ($audio_data === false && !empty($row->recording_link)) {
+        $portal_email    = get_option('binotel_portal_email');
+        $portal_password = get_option('binotel_portal_password');
+        if (!empty($portal_email) && !empty($portal_password)) {
+            $cookie = $this->_get_portal_cookie($portal_email, $portal_password, $portal_debug);
+            if ($cookie) {
+                $audio_data = $this->_download_file_with_cookie($row->recording_link, $cookie);
+                if ($audio_data !== false && $this->_is_html($audio_data)) {
+                    $portal_debug .= ' got_html';
+                    $audio_data = false;
+                }
+            }
+        } else {
+            $portal_debug = 'portal_creds=не_вказані';
+        }
+    }
 
-    $debug = 'overlay_url=' . (!empty($row->direct_audio_url) ? substr($row->direct_audio_url, 0, 60) : 'немає')
-           . ', id=' . ($general_call_id ?: 'порожній');
+    $debug = 'overlay=' . (!empty($row->direct_audio_url) ? 'є' : 'немає')
+           . ($portal_debug ? ' | portal: ' . $portal_debug : '');
 
     if ($audio_data === false) {
         echo json_encode(['success' => false, 'error' => 'Не вдалося завантажити аудіозапис. (' . $debug . ')'] + $csrf);
@@ -517,6 +533,115 @@ private function _download_via_binotel_api($general_call_id, $api_key, $api_secr
         return false;
     }
 
+    return $data;
+}
+
+/**
+ * Авторизується на my.binotel.ua та повертає рядок куки для подальших запитів.
+ * Binotel API не дає доступу до аудіофайлів, тому потрібна портальна сесія.
+ *
+ * @param string  $email
+ * @param string  $password
+ * @param string &$debug
+ * @return string|false  рядок виду "PHPSESSID=xxx; ..."
+ */
+private function _get_portal_cookie($email, $password, &$debug = '') {
+    // Кешуємо куку у tmp файлі щоб не логінитись при кожному запиті
+    $cache_file = sys_get_temp_dir() . '/binotel_portal_cookie_' . md5($email) . '.txt';
+    if (file_exists($cache_file) && (time() - filemtime($cache_file)) < 3600) {
+        $cached = file_get_contents($cache_file);
+        if ($cached) {
+            $debug = 'portal=cached_cookie';
+            return $cached;
+        }
+    }
+
+    // Крок 1: GET головної сторінки — отримуємо початкові куки і форму
+    $ch = curl_init('https://my.binotel.ua/');
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_HEADER,         true);
+    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, false);
+    curl_setopt($ch, CURLOPT_TIMEOUT,        30);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+    curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
+    $resp1 = curl_exec($ch);
+    curl_close($ch);
+
+    // Збираємо Set-Cookie з першої відповіді
+    $init_cookies = [];
+    preg_match_all('/^Set-Cookie:\s*([^;\r\n]+)/mi', $resp1, $m);
+    foreach ($m[1] as $c) { $init_cookies[] = trim($c); }
+
+    // Крок 2: POST форми логіну
+    $post_data = http_build_query([
+        'email'    => $email,
+        'password' => $password,
+    ]);
+
+    $ch = curl_init('https://my.binotel.ua/');
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_HEADER,         true);
+    curl_setopt($ch, CURLOPT_POST,           true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS,     $post_data);
+    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, false);
+    curl_setopt($ch, CURLOPT_TIMEOUT,        30);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+    curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        'Content-Type: application/x-www-form-urlencoded',
+        'Referer: https://my.binotel.ua/',
+    ]);
+    if ($init_cookies) {
+        curl_setopt($ch, CURLOPT_COOKIE, implode('; ', $init_cookies));
+    }
+    $resp2     = curl_exec($ch);
+    $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    // Збираємо всі куки з відповіді (об'єднуємо початкові + нові)
+    preg_match_all('/^Set-Cookie:\s*([^;\r\n]+)/mi', $resp2, $m2);
+    $all_cookies = $init_cookies;
+    foreach ($m2[1] as $c) {
+        $name = explode('=', trim($c), 2)[0];
+        // Перезаписуємо куку з тим же ім'ям
+        $all_cookies = array_filter($all_cookies, fn($x) => strpos($x, $name . '=') === false);
+        $all_cookies[] = trim($c);
+    }
+    $cookie_str = implode('; ', $all_cookies);
+
+    $debug = 'portal_login=HTTP' . $http_code;
+
+    // Редирект після логіну (302) або вже на головній (200) — обидва означають успіх
+    if (($http_code === 302 || $http_code === 200) && $cookie_str) {
+        file_put_contents($cache_file, $cookie_str);
+        return $cookie_str;
+    }
+
+    $debug .= ' FAIL';
+    return false;
+}
+
+/**
+ * Завантажує файл за URL використовуючи сесійну куку (портальна авторизація)
+ * @param string $url
+ * @param string $cookie  рядок куки виду "name=val; name2=val2"
+ * @return string|false
+ */
+private function _download_file_with_cookie($url, $cookie) {
+    $ch = curl_init($url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+    curl_setopt($ch, CURLOPT_TIMEOUT,        60);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+    curl_setopt($ch, CURLOPT_COOKIE,         $cookie);
+    curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
+    curl_setopt($ch, CURLOPT_HTTPHEADER, ['Referer: https://my.binotel.ua/']);
+    $data      = curl_exec($ch);
+    $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    if ($data === false || $http_code !== 200) {
+        return false;
+    }
     return $data;
 }
 

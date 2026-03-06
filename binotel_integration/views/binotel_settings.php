@@ -17,7 +17,19 @@
 </div>
 
 <div class="form-group">
-    <label for="binotel_openai_api_key"><?php echo _l('OpenAI API Key (для транскрибації)'); ?></label>
+    <label for="binotel_portal_email"><?php echo _l('Email для входу в my.binotel.ua'); ?></label>
+    <input type="email" id="binotel_portal_email" name="settings[binotel_portal_email]" class="form-control"
+           value="<?php echo get_option('binotel_portal_email'); ?>"
+           placeholder="your@email.com">
+    <small class="text-muted"><?php echo _l('Потрібно для транскрибації — сервер логіниться в портал щоб скачати аудіофайл.'); ?></small>
+</div>
+<div class="form-group">
+    <label for="binotel_portal_password"><?php echo _l('Пароль для my.binotel.ua'); ?></label>
+    <input type="password" id="binotel_portal_password" name="settings[binotel_portal_password]" class="form-control"
+           value="<?php echo get_option('binotel_portal_password'); ?>">
+</div>
+
+
     <input type="password" id="binotel_openai_api_key" name="settings[binotel_openai_api_key]" class="form-control"
            value="<?php echo get_option('binotel_openai_api_key'); ?>"
            placeholder="sk-...">
