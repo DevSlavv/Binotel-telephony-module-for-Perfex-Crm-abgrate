@@ -61,26 +61,50 @@ class Binotel_admin extends AdminController {
             $data['calls_per_client'] = [];
         }
 
-        // Для кожного сповіщення підтягуємо recording_link із таблиць статистики
+        // Збираємо унікальні номери телефонів з усіх сповіщень
+        $phones = [];
+        foreach ($data['notifications'] as $note) {
+            $additional = @unserialize($note->additional_data);
+            if (is_array($additional) && !empty($additional[0])) {
+                $phones[] = trim($additional[0]);
+            }
+        }
+        $phones = array_values(array_unique(array_filter($phones)));
+
+        // Batch-запити: 3 запити замість N×3
+        $recording_map = [];
+        if (!empty($phones)) {
+            $tables_batch = [
+                'leads'   => db_prefix().'binotel_call_statistics_leads',
+                'clients' => db_prefix().'binotel_call_statistics_clients',
+                'staff'   => db_prefix().'binotel_call_statistics_staff',
+            ];
+            foreach ($tables_batch as $rows) {
+                $result = $this->db
+                    ->select('contact_name, recording_link')
+                    ->where_in('contact_name', $phones)
+                    ->where('recording_link !=', '')
+                    ->order_by('call_time', 'DESC')
+                    ->get($rows)->result();
+                foreach ($result as $r) {
+                    $p = $r->contact_name;
+                    // Перший збіг (найновіший) зберігається; пріоритет: leads > clients > staff
+                    if (!isset($recording_map[$p]) && !empty($r->recording_link)) {
+                        $recording_map[$p] = $r->recording_link;
+                    }
+                }
+            }
+        }
+
+        // Для кожного сповіщення підтягуємо recording_link із map (O(1))
         foreach ($data['notifications'] as &$note) {
             $phone = '';
             $additional = @unserialize($note->additional_data);
             if (is_array($additional) && !empty($additional[0])) {
                 $phone = trim($additional[0]);
             }
-            // Якщо номер знайдено, шукаємо recording_link у таблицях (спершу у лідів, потім у клієнтів, потім у співробітників)
-            if (!empty($phone)) {
-                $recordingLink = $this->find_recording_link_by_phone($phone, 'leads');
-                if (!$recordingLink) {
-                    $recordingLink = $this->find_recording_link_by_phone($phone, 'clients');
-                }
-                if (!$recordingLink) {
-                    $recordingLink = $this->find_recording_link_by_phone($phone, 'staff');
-                }
-                $note->recording_link = $recordingLink ? $recordingLink : '';
-            } else {
-                $note->recording_link = '';
-            }
+            $note->recording_link = (!empty($phone) && isset($recording_map[$phone]))
+                ? $recording_map[$phone] : '';
         }
         unset($note);
 

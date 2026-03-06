@@ -115,7 +115,6 @@
 
 <!-- Підключення бібліотек -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datepicker/1.9.0/js/bootstrap-datepicker.min.js"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datepicker/1.9.0/css/bootstrap-datepicker.min.css">
 
@@ -142,12 +141,20 @@
 <script>
 $(document).ready(function(){
   // Ініціалізація datepicker
-  $('.datepicker').datetimepicker({
-            format: 'Y-m-d',
-            timepicker: false,
-            scrollMonth: false,
-            scrollInput: false,
-        });
+  $('.datepicker').datepicker({
+    format: 'yyyy-mm-dd',
+    autoclose: true,
+    todayHighlight: true,
+  });
+
+  // Клікабельні рядки таблиці
+  $(document).on('click', '.clickable-row', function(e) {
+    if (!$(e.target).closest('button, a').length) {
+      window.location.href = $(this).data('href');
+    }
+  });
+  // Візуальна підказка про клікабельність
+  $('<style>.clickable-row { cursor: pointer; } .clickable-row:hover { background-color: #f5f5f5; }</style>').appendTo('head');
 
   // Фільтр: при натисканні кнопки "Фільтрувати" редірект
   $('#filter_btn').click(function(){
