@@ -401,41 +401,5 @@ class Binotel_integration extends CI_Controller {
         }
     }
     
-    public function get_filtered_calls_for_staff() {
-        $staff_id = $this->input->post('staff_id');
-        $start_date = $this->input->post('start_date');
-        $end_date = $this->input->post('end_date');
-        if (empty($staff_id)) {
-            echo json_encode(['status' => 'error', 'message' => 'ID співробітника не передано']);
-            return;
-        }
-        $this->load->model('binotel_integration/Binotel_integration_model');
-        $call_statistics = $this->Binotel_integration_model->get_staff_call_statistics($staff_id, $start_date, $end_date);
-        $html = $this->load->view('binotel_integration/call_statistics_partial_view_staff', ['call_statistics' => $call_statistics], true);
-        echo json_encode(['status' => 'success', 'html' => $html]);
-    }
-    
-    public function load_staff_call_statistics() {
-        $staff_id = $this->input->get('staff_id');
-        if (!$staff_id) {
-            echo "ID співробітника не передано.";
-            return;
-        }
-        $staff = $this->db->select('staffid, firstname, lastname, phonenumber')
-                          ->where('staffid', $staff_id)
-                          ->get(db_prefix() . 'staff')
-                          ->row();
-        if (!$staff) {
-            echo "Співробітника не знайдено.";
-            return;
-        }
-        $this->load->model('binotel_integration/Binotel_integration_model');
-        $call_statistics = $this->Binotel_integration_model->get_staff_call_statistics($staff_id);
-        $data = [
-            'member' => $staff,
-            'call_statistics' => $call_statistics
-        ];
-        $this->load->view('binotel_integration/staff_call_statistics', $data);
-    }
 }
 

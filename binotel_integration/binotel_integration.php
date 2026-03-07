@@ -154,7 +154,7 @@ function binotel_integration_add_staff_tab_js() {
                     // Завантажити вміст через AJAX при переході на вкладку
                     document.querySelector("a[href=\'#tab_call_statistics\']").addEventListener("click", function () {
                         if (!newTabContent.dataset.loaded) {
-                            fetch("' . admin_url('binotel_integration/load_staff_call_statistics') . '?staff_id=" + staffId)
+                            fetch("' . admin_url('binotel_integration/binotel_admin/load_staff_call_statistics') . '?staff_id=" + staffId)
                                 .then(response => response.text())
                                 .then(html => {
                                     document.getElementById("call-statistics-content").innerHTML = html;
