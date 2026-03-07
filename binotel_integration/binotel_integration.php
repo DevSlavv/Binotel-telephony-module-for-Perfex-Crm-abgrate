@@ -191,24 +191,71 @@ function binotel_transcription_js() {
 
     $CI = &get_instance();
     $transcribe_url = admin_url('binotel_integration/binotel_admin/transcribe_call');
+    $delete_url     = admin_url('binotel_integration/binotel_admin/delete_transcription');
     $csrf_name      = $CI->security->get_csrf_token_name();
     $csrf_hash      = $CI->security->get_csrf_hash();
     ob_start();
     ?>
 <style>
-.binotel-transcription-text {
-    max-width: 400px;
-    word-wrap: break-word;
-    white-space: pre-wrap;
-    font-size: 13px;
-    color: #333;
+.binotel-transcription-dialog {
+    max-width: 420px;
+    max-height: 220px;
+    overflow-y: auto;
+    border: 1px solid #dce3ea;
+    border-radius: 6px;
+    padding: 6px 8px;
+    background: #f8fafc;
+    font-size: 12px;
     margin-bottom: 4px;
 }
+.binotel-dialog-line {
+    display: flex;
+    gap: 6px;
+    padding: 4px 0;
+    border-bottom: 1px solid #edf1f5;
+    line-height: 1.5;
+}
+.binotel-dialog-line:last-child { border-bottom: none; }
+.binotel-dialog-ts {
+    color: #aaa;
+    font-size: 11px;
+    white-space: nowrap;
+    min-width: 38px;
+    padding-top: 1px;
+    font-family: monospace;
+}
+.binotel-dialog-text { color: #333; flex: 1; }
+.binotel-dialog-plain { color: #333; white-space: pre-wrap; flex: 1; }
+.binotel-btn-row { margin-top: 4px; }
+.binotel-btn-row .btn { margin-right: 4px; }
 </style>
 <script>
 (function() {
     var csrfName = '<?php echo $csrf_name; ?>';
     var csrfHash = '<?php echo $csrf_hash; ?>';
+
+    function escHtml(s) {
+        return String(s)
+            .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+            .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function renderDialog(container, transcription) {
+        var segs;
+        try { segs = JSON.parse(transcription); } catch(e) { segs = null; }
+        if (Array.isArray(segs) && segs.length) {
+            container.innerHTML = segs.map(function(s) {
+                return '<div class="binotel-dialog-line">' +
+                    '<span class="binotel-dialog-ts">' + escHtml(s.t) + '</span>' +
+                    '<span class="binotel-dialog-text">' + escHtml(s.text) + '</span>' +
+                    '</div>';
+            }).join('');
+        } else {
+            container.innerHTML = '<div class="binotel-dialog-line">' +
+                '<span class="binotel-dialog-plain">' + escHtml(transcription) + '</span>' +
+                '</div>';
+        }
+    }
 
     function resetBtn(btn) {
         if (!btn) return;
@@ -218,30 +265,35 @@ function binotel_transcription_js() {
             : '<i class="fa fa-file-text-o"></i> Транскрибувати';
     }
 
+    function showTranscription(wrapper, transcription, btn) {
+        var dialog = wrapper.querySelector('.binotel-transcription-dialog');
+        if (!dialog) {
+            dialog = document.createElement('div');
+            dialog.className = 'binotel-transcription-dialog';
+            wrapper.insertBefore(dialog, wrapper.firstChild);
+        }
+        renderDialog(dialog, transcription);
+
+        var btnRow = wrapper.querySelector('.binotel-btn-row');
+        if (!btnRow) {
+            btnRow = document.createElement('div');
+            btnRow.className = 'binotel-btn-row';
+            btnRow.innerHTML =
+                '<button class="btn btn-xs btn-default binotel-retranscribe-btn" title="Транскрибувати повторно"><i class="fa fa-refresh"></i></button>' +
+                '<button class="btn btn-xs btn-danger binotel-delete-transcription-btn" title="Видалити транскрипцію"><i class="fa fa-trash"></i></button>';
+            if (btn) { btn.replaceWith(btnRow); }
+            else { wrapper.appendChild(btnRow); }
+        }
+    }
+
     function handleServerResponse(r, btn, wrapper) {
-        var newCsrf = r.headers.get('X-CSRF-Token');
-        if (newCsrf) { csrfHash = newCsrf; }
         return r.text().then(function(text) {
             if (!text) throw new Error('Порожня відповідь сервера.');
             var data;
-            try { data = JSON.parse(text); } catch (e) {
-                throw new Error('Невірна відповідь сервера.');
-            }
+            try { data = JSON.parse(text); } catch(e) { throw new Error('Невірна відповідь сервера.'); }
             if (data.csrf_hash) { csrfHash = data.csrf_hash; }
             if (data.success) {
-                var textDiv = wrapper.querySelector('.binotel-transcription-text');
-                if (!textDiv) {
-                    textDiv = document.createElement('div');
-                    textDiv.className = 'binotel-transcription-text';
-                    wrapper.insertBefore(textDiv, wrapper.firstChild);
-                }
-                textDiv.textContent = data.transcription;
-                if (btn) {
-                    btn.className = 'btn btn-xs btn-default binotel-retranscribe-btn';
-                    btn.disabled = false;
-                    btn.title = 'Транскрибувати повторно';
-                    btn.innerHTML = '<i class="fa fa-refresh"></i>';
-                }
+                showTranscription(wrapper, data.transcription, btn);
             } else {
                 alert('Помилка транскрибації: ' + (data.error || 'Невідома помилка'));
                 resetBtn(btn);
@@ -278,7 +330,6 @@ function binotel_transcription_js() {
             btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Завантаження...';
         }
 
-        // Метод 1: fetch з credentials — якщо Binotel дозволяє CORS, отримаємо blob одразу
         if (recordingUrl) {
             fetch(recordingUrl, { credentials: 'include' })
                 .then(function(r) {
@@ -292,7 +343,6 @@ function binotel_transcription_js() {
                     sendBlob(blob, callId, callType, btn, wrapper, 'mp3');
                 })
                 .catch(function() {
-                    // CORS заблокував — відкриваємо завантаження і picker одночасно
                     resetBtn(btn);
                     showFileUpload(wrapper, callId, callType, true);
                 });
@@ -308,7 +358,6 @@ function binotel_transcription_js() {
 
         var recordingUrl = wrapper.getAttribute('data-recording-url');
 
-        // Якщо autoDownload — одразу тригеримо завантаження файлу в браузері
         if (autoDownload && recordingUrl) {
             var a = document.createElement('a');
             a.href = recordingUrl;
@@ -344,6 +393,50 @@ function binotel_transcription_js() {
     }
 
     document.addEventListener('click', function(e) {
+        // Видалення транскрипції
+        var delBtn = e.target.closest('.binotel-delete-transcription-btn');
+        if (delBtn) {
+            if (!confirm('Видалити транскрипцію?')) return;
+            var wrapper = delBtn.closest('.binotel-transcription-wrapper');
+            if (!wrapper) return;
+            var callId   = wrapper.getAttribute('data-call-id');
+            var callType = wrapper.getAttribute('data-call-type');
+            var formData = new FormData();
+            formData.append('call_id', callId);
+            formData.append('call_type', callType);
+            formData.append(csrfName, csrfHash);
+            delBtn.disabled = true;
+            delBtn.innerHTML = '<i class="fa fa-spinner fa-spin"></i>';
+            fetch('<?php echo $delete_url; ?>', {
+                method: 'POST',
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                body: formData
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.csrf_hash) csrfHash = data.csrf_hash;
+                if (data.success) {
+                    var dialog = wrapper.querySelector('.binotel-transcription-dialog');
+                    var btnRow = wrapper.querySelector('.binotel-btn-row');
+                    if (dialog) dialog.remove();
+                    var newBtn = document.createElement('button');
+                    newBtn.className = 'btn btn-xs btn-primary binotel-transcribe-btn';
+                    newBtn.innerHTML = '<i class="fa fa-file-text-o"></i> Транскрибувати';
+                    if (btnRow) { btnRow.replaceWith(newBtn); }
+                    else { wrapper.appendChild(newBtn); }
+                } else {
+                    delBtn.disabled = false;
+                    delBtn.innerHTML = '<i class="fa fa-trash"></i>';
+                }
+            })
+            .catch(function() {
+                delBtn.disabled = false;
+                delBtn.innerHTML = '<i class="fa fa-trash"></i>';
+            });
+            return;
+        }
+
+        // Транскрибація
         var btn = e.target.closest('.binotel-transcribe-btn, .binotel-retranscribe-btn');
         if (!btn) return;
         var wrapper = btn.closest('.binotel-transcription-wrapper');

@@ -231,6 +231,42 @@ class Binotel_admin extends AdminController {
 
 
 
+/**
+ * Видаляє транскрипцію запису розмови
+ * POST: call_id (int), call_type (leads|clients|staff)
+ */
+public function delete_transcription() {
+    if (!$this->input->is_ajax_request()) {
+        show_404();
+    }
+    header('Content-Type: application/json');
+
+    $csrf = [
+        'csrf_name' => $this->security->get_csrf_token_name(),
+        'csrf_hash' => $this->security->get_csrf_hash(),
+    ];
+
+    $call_id   = (int) $this->input->post('call_id');
+    $call_type = $this->input->post('call_type');
+
+    $allowed_types = ['leads', 'clients', 'staff'];
+    if (!$call_id || !in_array($call_type, $allowed_types)) {
+        echo json_encode(['success' => false, 'error' => 'Невірні параметри'] + $csrf);
+        return;
+    }
+
+    $tables = [
+        'leads'   => db_prefix() . 'binotel_call_statistics_leads',
+        'clients' => db_prefix() . 'binotel_call_statistics_clients',
+        'staff'   => db_prefix() . 'binotel_call_statistics_staff',
+    ];
+
+    $this->db->where('id', $call_id);
+    $this->db->update($tables[$call_type], ['transcription' => null]);
+
+    echo json_encode(['success' => true] + $csrf);
+}
+
 public function mark_binotel_notifications_read() {
     $this->db->set('isread', 1);
     $this->db->update(db_prefix().'binotel_notifications');
@@ -667,9 +703,10 @@ private function _download_file($url) {
  */
 private function _transcribe_with_whisper($file_path, $api_key) {
     $post_fields = [
-        'file'     => new CURLFile($file_path, 'audio/mpeg', 'recording.mp3'),
-        'model'    => 'whisper-1',
-        'language' => 'uk',
+        'file'            => new CURLFile($file_path, 'audio/mpeg', 'recording.mp3'),
+        'model'           => 'whisper-1',
+        'language'        => 'uk',
+        'response_format' => 'verbose_json',
     ];
 
     $ch = curl_init('https://api.openai.com/v1/audio/transcriptions');
@@ -691,10 +728,31 @@ private function _transcribe_with_whisper($file_path, $api_key) {
     }
 
     $result = json_decode($response, true);
-    if (!isset($result['text'])) {
+    if (!is_array($result)) {
         return false;
     }
-    return $result['text'];
+
+    // Формуємо сегменти з мітками часу для діалогового відображення
+    if (!empty($result['segments']) && is_array($result['segments'])) {
+        $segments = [];
+        foreach ($result['segments'] as $seg) {
+            $start = isset($seg['start']) ? (float)$seg['start'] : 0;
+            $mins  = (int)($start / 60);
+            $secs  = (int)fmod($start, 60);
+            $segments[] = [
+                't'    => sprintf('%02d:%02d', $mins, $secs),
+                'text' => trim($seg['text'] ?? ''),
+            ];
+        }
+        // Об'єднуємо сусідні порожні або дуже короткі сегменти
+        $segments = array_values(array_filter($segments, function($s) {
+            return strlen($s['text']) > 1;
+        }));
+        return json_encode($segments, JSON_UNESCAPED_UNICODE);
+    }
+
+    // Fallback: повертаємо простий текст якщо сегментів нема
+    return isset($result['text']) ? $result['text'] : false;
 }
 
 

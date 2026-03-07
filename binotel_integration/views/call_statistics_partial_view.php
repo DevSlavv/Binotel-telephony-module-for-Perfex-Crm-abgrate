@@ -40,10 +40,25 @@
                             <?php if ($call['recording_link']): ?>
                                 <div class="binotel-transcription-wrapper" data-call-id="<?php echo $call['id']; ?>" data-call-type="leads" data-recording-url="<?php echo htmlspecialchars($call['recording_link']); ?>">
                                     <?php if (!empty($call['transcription'])): ?>
-                                        <div class="binotel-transcription-text"><?php echo htmlspecialchars($call['transcription']); ?></div>
-                                        <button class="btn btn-xs btn-default binotel-retranscribe-btn" title="Транскрибувати повторно">
-                                            <i class="fa fa-refresh"></i>
-                                        </button>
+                                        <?php $segs = @json_decode($call['transcription'], true); ?>
+                                        <div class="binotel-transcription-dialog">
+                                            <?php if (is_array($segs)): ?>
+                                                <?php foreach ($segs as $seg): ?>
+                                                    <div class="binotel-dialog-line">
+                                                        <span class="binotel-dialog-ts"><?php echo htmlspecialchars($seg['t']); ?></span>
+                                                        <span class="binotel-dialog-text"><?php echo htmlspecialchars($seg['text']); ?></span>
+                                                    </div>
+                                                <?php endforeach; ?>
+                                            <?php else: ?>
+                                                <div class="binotel-dialog-line">
+                                                    <span class="binotel-dialog-plain"><?php echo nl2br(htmlspecialchars($call['transcription'])); ?></span>
+                                                </div>
+                                            <?php endif; ?>
+                                        </div>
+                                        <div class="binotel-btn-row">
+                                            <button class="btn btn-xs btn-default binotel-retranscribe-btn" title="Транскрибувати повторно"><i class="fa fa-refresh"></i></button>
+                                            <button class="btn btn-xs btn-danger binotel-delete-transcription-btn" title="Видалити транскрипцію"><i class="fa fa-trash"></i></button>
+                                        </div>
                                     <?php else: ?>
                                         <button class="btn btn-xs btn-primary binotel-transcribe-btn">
                                             <i class="fa fa-file-text-o"></i> Транскрибувати
