@@ -382,7 +382,7 @@ class Binotel_integration extends CI_Controller {
         $this->load->model('binotel_integration/Binotel_integration_model');
         $call_statistics = $this->Binotel_integration_model->get_lead_call_statistics($lead_id, $start_date, $end_date);
         if (!empty($call_statistics)) {
-            $this->load->view('call_statistics_partial_view', ['call_statistics' => $call_statistics]);
+            $this->load->view('binotel_integration/call_statistics_partial_view', ['call_statistics' => $call_statistics]);
         } else {
             echo "<p>Записів розмов за цей період не знайдено</p>";
         }
@@ -395,7 +395,7 @@ class Binotel_integration extends CI_Controller {
         $this->load->model('binotel_integration/Binotel_integration_model');
         $call_statistics = $this->Binotel_integration_model->get_client_call_statistics($client_id, $start_date, $end_date);
         if (!empty($call_statistics)) {
-            $this->load->view('call_statistics_partial_view_clients', ['call_statistics' => $call_statistics]);
+            $this->load->view('binotel_integration/call_statistics_partial_view_clients', ['call_statistics' => $call_statistics]);
         } else {
             echo "<p>Записів розмов за цей період не знайдено.</p>";
         }
@@ -411,7 +411,7 @@ class Binotel_integration extends CI_Controller {
         }
         $this->load->model('binotel_integration/Binotel_integration_model');
         $call_statistics = $this->Binotel_integration_model->get_staff_call_statistics($staff_id, $start_date, $end_date);
-        $html = $this->load->view('call_statistics_partial_view_staff', ['call_statistics' => $call_statistics], true);
+        $html = $this->load->view('binotel_integration/call_statistics_partial_view_staff', ['call_statistics' => $call_statistics], true);
         echo json_encode(['status' => 'success', 'html' => $html]);
     }
     
@@ -435,7 +435,7 @@ class Binotel_integration extends CI_Controller {
             'member' => $staff,
             'call_statistics' => $call_statistics
         ];
-        $this->load->view('staff_call_statistics', $data);
+        $this->load->view('binotel_integration/staff_call_statistics', $data);
     }
 }
 
