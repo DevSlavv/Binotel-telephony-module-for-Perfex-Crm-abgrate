@@ -14,6 +14,36 @@ class Binotel_admin extends AdminController {
     }
 
     /**
+     * Повертає відфільтровані дзвінки ліда (AJAX POST)
+     */
+    public function get_filtered_calls_for_lead() {
+        $lead_id    = $this->input->post('lead_id');
+        $start_date = $this->input->post('start_date');
+        $end_date   = $this->input->post('end_date');
+        $call_statistics = $this->Binotel_integration_model->get_lead_call_statistics($lead_id, $start_date, $end_date);
+        if (!empty($call_statistics)) {
+            $this->load->view('binotel_integration/call_statistics_partial_view', ['call_statistics' => $call_statistics]);
+        } else {
+            echo '<p>Записів розмов за цей період не знайдено</p>';
+        }
+    }
+
+    /**
+     * Повертає відфільтровані дзвінки клієнта (AJAX POST)
+     */
+    public function get_filtered_calls_for_client() {
+        $client_id  = $this->input->post('client_id');
+        $start_date = $this->input->post('start_date');
+        $end_date   = $this->input->post('end_date');
+        $call_statistics = $this->Binotel_integration_model->get_client_call_statistics($client_id, $start_date, $end_date);
+        if (!empty($call_statistics)) {
+            $this->load->view('binotel_integration/call_statistics_partial_view_clients', ['call_statistics' => $call_statistics]);
+        } else {
+            echo '<p>Записів розмов за цей період не знайдено.</p>';
+        }
+    }
+
+    /**
      * Завантажує вкладку статистики розмов для картки співробітника (AJAX GET)
      */
     public function load_staff_call_statistics() {

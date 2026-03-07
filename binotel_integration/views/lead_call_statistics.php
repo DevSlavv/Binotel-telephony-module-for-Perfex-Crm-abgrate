@@ -148,7 +148,7 @@ $phone_numbers = preg_split('/[\s,\.]+/', $lead_phone);
         data.push({ name: csrfName, value: csrfHash });
 
         $.ajax({
-            url: '<?php echo admin_url('binotel_integration/get_filtered_calls_for_lead'); ?>',
+            url: '<?php echo admin_url('binotel_integration/binotel_admin/get_filtered_calls_for_lead'); ?>',
             type: 'POST',
             data: $.param(data),
             success: function(response) {

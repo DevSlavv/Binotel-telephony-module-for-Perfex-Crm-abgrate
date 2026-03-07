@@ -150,7 +150,7 @@ $phone_numbers = preg_split('/[\s,\.]+/', $client_phone);
         data.push({ name: csrfName, value: csrfHash });
 
         $.ajax({
-            url: '<?php echo admin_url('binotel_integration/get_filtered_calls_for_client'); ?>',
+            url: '<?php echo admin_url('binotel_integration/binotel_admin/get_filtered_calls_for_client'); ?>',
             type: 'POST',
             data: $.param(data),
             success: function(response) {
