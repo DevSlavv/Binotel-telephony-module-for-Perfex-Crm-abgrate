@@ -11,11 +11,11 @@
         <div class="row">
           <div class="col-md-4">
             <label>Дата від:</label>
-            <input type="text" id="start_date" class="form-control datepicker" autocomplete="off" value="<?php echo isset($_GET['start_date']) ? $_GET['start_date'] : ''; ?>">
+            <input type="text" id="start_date" class="form-control" autocomplete="off" value="<?php echo isset($_GET['start_date']) ? html_escape($_GET['start_date']) : ''; ?>">
           </div>
           <div class="col-md-4">
             <label>Дата до:</label>
-            <input type="text" id="end_date" class="form-control datepicker" autocomplete="off" value="<?php echo isset($_GET['end_date']) ? $_GET['end_date'] : ''; ?>">
+            <input type="text" id="end_date" class="form-control" autocomplete="off" value="<?php echo isset($_GET['end_date']) ? html_escape($_GET['end_date']) : ''; ?>">
           </div>
           <div class="col-md-4">
             <br>
@@ -115,8 +115,6 @@
 
 <!-- Підключення бібліотек -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datepicker/1.9.0/js/bootstrap-datepicker.min.js"></script>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datepicker/1.9.0/css/bootstrap-datepicker.min.css">
 
 <!-- Модальне вікно для аудіопрогравача -->
 <div class="modal fade" id="recordingModal" tabindex="-1" role="dialog" aria-labelledby="recordingModalLabel">
@@ -140,11 +138,12 @@
 
 <script>
 $(document).ready(function(){
-  // Ініціалізація datepicker
-  $('.datepicker').datepicker({
-    format: 'yyyy-mm-dd',
-    autoclose: true,
-    todayHighlight: true,
+  // Ініціалізація datepicker (вбудований Perfex datetimepicker)
+  $('#start_date, #end_date').datetimepicker({
+    format: 'Y-m-d',
+    timepicker: false,
+    scrollMonth: false,
+    scrollInput: false
   });
 
   // Клікабельні рядки таблиці
