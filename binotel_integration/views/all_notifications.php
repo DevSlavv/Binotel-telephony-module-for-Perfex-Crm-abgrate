@@ -35,10 +35,10 @@
         <?php if (!empty($calls_per_lead) || !empty($calls_per_client)): ?>
           <div class="row">
             <div class="col-md-6">
-              <canvas id="callsPerLeadChart" style="height: 400px;"></canvas>
+              <canvas id="callsPerLeadChart" style="height: 400px; cursor: pointer;"></canvas>
             </div>
             <div class="col-md-6">
-              <canvas id="callsPerClientChart" style="height: 400px;"></canvas>
+              <canvas id="callsPerClientChart" style="height: 400px; cursor: pointer;"></canvas>
             </div>
           </div>
         <?php endif; ?>
@@ -174,7 +174,8 @@ $(document).ready(function(){
   // Побудова графіка "Кількість дзвінків від кожного ліда"
   <?php if (!empty($calls_per_lead)): ?>
     var callsPerLeadLabels = [<?php foreach ($calls_per_lead as $lead){ echo '"' . addslashes(strip_tags($lead->description)) . '",'; } ?>];
-    var callsPerLeadData = [<?php foreach ($calls_per_lead as $lead){ echo (int)$lead->count . ','; } ?>];
+    var callsPerLeadData   = [<?php foreach ($calls_per_lead as $lead){ echo (int)$lead->count . ','; } ?>];
+    var callsPerLeadLinks  = [<?php foreach ($calls_per_lead as $lead){ echo '"' . addslashes($lead->link ?? '') . '",'; } ?>];
     var ctx1 = document.getElementById('callsPerLeadChart').getContext('2d');
     new Chart(ctx1, {
       type: 'bar',
@@ -195,12 +196,11 @@ $(document).ready(function(){
           x: { ticks: { maxRotation: 45, minRotation: 45 } },
           y: { beginAtZero: true, ticks: { stepSize: 1 } }
         },
+        plugins: { tooltip: { callbacks: { footer: function(){ return 'Клікніть для переходу'; } } } },
         onClick: function (event, elements) {
-          if(elements.length > 0){
-              var index = elements[0].index;
-              var selectedLead = callsPerLeadLabels[index];
-              var url = "<?php echo admin_url('leads/view/'); ?>" + encodeURIComponent(selectedLead);
-              window.open(url, "_blank");
+          if (elements.length > 0) {
+            var link = callsPerLeadLinks[elements[0].index];
+            if (link) { window.open('<?php echo admin_url(); ?>' + link, '_blank'); }
           }
         }
       }
@@ -210,7 +210,8 @@ $(document).ready(function(){
   // Побудова графіка "Кількість дзвінків від кожного клієнта"
   <?php if (!empty($calls_per_client)): ?>
     var callsPerClientLabels = [<?php foreach ($calls_per_client as $client){ echo '"' . addslashes(strip_tags($client->description)) . '",'; } ?>];
-    var callsPerClientData = [<?php foreach ($calls_per_client as $client){ echo (int)$client->count . ','; } ?>];
+    var callsPerClientData   = [<?php foreach ($calls_per_client as $client){ echo (int)$client->count . ','; } ?>];
+    var callsPerClientLinks  = [<?php foreach ($calls_per_client as $client){ echo '"' . addslashes($client->link ?? '') . '",'; } ?>];
     var ctx2 = document.getElementById('callsPerClientChart').getContext('2d');
     new Chart(ctx2, {
       type: 'bar',
@@ -231,12 +232,11 @@ $(document).ready(function(){
           x: { ticks: { maxRotation: 45, minRotation: 45 } },
           y: { beginAtZero: true, ticks: { stepSize: 1 } }
         },
+        plugins: { tooltip: { callbacks: { footer: function(){ return 'Клікніть для переходу'; } } } },
         onClick: function (event, elements) {
-          if(elements.length > 0){
-              var index = elements[0].index;
-              var selectedClient = callsPerClientLabels[index];
-              var url = "<?php echo admin_url('clients/view/'); ?>" + encodeURIComponent(selectedClient);
-              window.open(url, "_blank");
+          if (elements.length > 0) {
+            var link = callsPerClientLinks[elements[0].index];
+            if (link) { window.open('<?php echo admin_url(); ?>' + link, '_blank'); }
           }
         }
       }

@@ -112,7 +112,7 @@ class Binotel_admin extends AdminController {
         // Готуємо дані для графіків, якщо період обрано
         if (!empty($start_date) && !empty($end_date)) {
             // Графік дзвінків від лідів (виключаємо записи, що містять "клієнт" або "клієнта")
-            $this->db->select('description, COUNT(*) as count');
+            $this->db->select('description, MIN(link) as link, COUNT(*) as count');
             $this->db->where('date >=', $start_date . ' 00:00:00');
             $this->db->where('date <=', $end_date . ' 23:59:59');
             $this->db->not_like('description', 'клієнт');
@@ -121,7 +121,7 @@ class Binotel_admin extends AdminController {
             $data['calls_per_lead'] = $this->db->get(db_prefix().'binotel_notifications')->result();
 
             // Графік дзвінків від клієнтів
-            $this->db->select('description, COUNT(*) as count');
+            $this->db->select('description, MIN(link) as link, COUNT(*) as count');
             $this->db->where('date >=', $start_date . ' 00:00:00');
             $this->db->where('date <=', $end_date . ' 23:59:59');
             $this->db->like('description', 'Вхідний дзвінок від клієнта');
